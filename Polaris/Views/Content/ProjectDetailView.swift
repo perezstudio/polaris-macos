@@ -25,11 +25,6 @@ struct ProjectDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Click-off background to deselect
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { deselectTask() }
-
             taskList
 
             VStack(spacing: 0) {
@@ -134,32 +129,37 @@ struct ProjectDetailView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(sortedTodos) { todo in
-                        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
+            GeometryReader { geometry in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(sortedTodos) { todo in
+                            let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
 
-                        TaskRowView(
-                            todo: todo,
-                            isSelected: isSelected,
-                            onSelect: {
-                                selectionStore.selectedTodo = todo
-                                isListFocused = true
-                                expandInspector(for: todo)
-                            }
-                        )
-                        .contextMenu {
-                            Button("Delete", role: .destructive) {
-                                deleteTodo(todo)
+                            TaskRowView(
+                                todo: todo,
+                                isSelected: isSelected,
+                                onSelect: {
+                                    selectionStore.selectedTodo = todo
+                                    isListFocused = true
+                                    expandInspector(for: todo)
+                                }
+                            )
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    deleteTodo(todo)
+                                }
                             }
                         }
                     }
+                    .frame(maxWidth: 800)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 68)
+                    .padding(.bottom, 24)
+                    .frame(minHeight: geometry.size.height, alignment: .top)
+                    .contentShape(Rectangle())
+                    .onTapGesture { deselectTask() }
                 }
-                .frame(maxWidth: 800)
-                .padding(.horizontal, 8)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 68)
-                .padding(.bottom, 24)
             }
         }
     }
