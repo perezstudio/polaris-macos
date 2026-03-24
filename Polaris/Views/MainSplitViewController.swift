@@ -14,11 +14,9 @@ final class MainSplitViewController: NSSplitViewController {
 
     private var sidebarHostingVC: NSViewController!
     private var emptyStateHostingVC: NSViewController!
-    private var inspectorHostingVC: NSViewController!
 
     private var sidebarItem: NSSplitViewItem!
     private var contentItem: NSSplitViewItem!
-    private var inspectorItem: NSSplitViewItem!
 
     // Track current project to avoid redundant swaps
     private var currentProjectId: PersistentIdentifier?
@@ -69,27 +67,6 @@ final class MainSplitViewController: NSSplitViewController {
         contentItem.holdingPriority = .defaultLow
         addSplitViewItem(contentItem)
 
-        // Inspector
-        let inspectorView = InspectorView(
-            selectionStore: selectionStore,
-            windowState: windowState,
-            onToggleInspector: { [weak self] in
-                self?.toggleInspector()
-            }
-        )
-        .modelContainer(modelContainer)
-        let inspectorHosting = NSHostingController(rootView: inspectorView)
-        inspectorHosting.sizingOptions = []
-        inspectorHostingVC = inspectorHosting
-
-        inspectorItem = NSSplitViewItem(viewController: inspectorHostingVC)
-        inspectorItem.canCollapse = true
-        inspectorItem.minimumThickness = 280
-        inspectorItem.maximumThickness = 350
-        inspectorItem.holdingPriority = .defaultLow + 1
-        inspectorItem.isCollapsed = true
-        addSplitViewItem(inspectorItem)
-
         // Observe selection changes
         setupSelectionObserver()
     }
@@ -106,29 +83,10 @@ final class MainSplitViewController: NSSplitViewController {
             }
         }
         observeProject()
-
-        func observeTodo() {
-            withObservationTracking {
-                _ = selectionStore.selectedTodo
-            } onChange: { [weak self] in
-                DispatchQueue.main.async {
-                    self?.handleTodoSelectionChanged()
-                    observeTodo()
-                }
-            }
-        }
-        observeTodo()
-    }
-
-    private func handleTodoSelectionChanged() {
-        if selectionStore.selectedTodo != nil {
-            expandInspectorIfNeeded()
-        }
     }
 
     private func handleProjectSelectionChanged() {
         guard let project = selectionStore.selectedProject else {
-            // No project selected — show empty state
             if currentProjectId != nil {
                 currentProjectId = nil
                 swapContentViewController(to: emptyStateHostingVC)
@@ -136,20 +94,15 @@ final class MainSplitViewController: NSSplitViewController {
             return
         }
 
-        // Same project — do nothing
         if currentProjectId == project.persistentModelID { return }
         currentProjectId = project.persistentModelID
 
-        // Show project detail view
         let detailView = ProjectDetailView(
             project: project,
             selectionStore: selectionStore,
             windowState: windowState,
             onToggleSidebar: { [weak self] in
                 self?.toggleSidebar()
-            },
-            onToggleInspector: { [weak self] in
-                self?.toggleInspector()
             }
         )
         .modelContainer(modelContainer)
@@ -170,19 +123,8 @@ final class MainSplitViewController: NSSplitViewController {
         }
     }
 
-    func toggleInspector() {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            context.allowsImplicitAnimation = true
-            inspectorItem.animator().isCollapsed.toggle()
-        } completionHandler: { [weak self] in
-            self?.updateCollapseState()
-        }
-    }
-
     private func updateCollapseState() {
         windowState.isSidebarCollapsed = sidebarItem.isCollapsed
-        windowState.isInspectorCollapsed = inspectorItem.isCollapsed
     }
 
     // MARK: - Content Swapping
@@ -199,41 +141,12 @@ final class MainSplitViewController: NSSplitViewController {
         insertSplitViewItem(contentItem, at: 1)
 
         windowState.isSidebarCollapsed = sidebarItem.isCollapsed
-        windowState.isInspectorCollapsed = inspectorItem.isCollapsed
-    }
-
-    func expandInspectorIfNeeded() {
-        if inspectorItem.isCollapsed {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                context.allowsImplicitAnimation = true
-                inspectorItem.animator().isCollapsed = false
-            } completionHandler: { [weak self] in
-                self?.updateCollapseState()
-            }
-        }
-    }
-
-    func collapseInspectorIfNeeded() {
-        if !inspectorItem.isCollapsed {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                context.allowsImplicitAnimation = true
-                inspectorItem.animator().isCollapsed = true
-            } completionHandler: { [weak self] in
-                self?.updateCollapseState()
-            }
-        }
     }
 
     // MARK: - Menu Actions
 
     @IBAction func toggleSidebarMenu(_ sender: Any?) {
         toggleSidebar()
-    }
-
-    @IBAction func toggleInspectorMenu(_ sender: Any?) {
-        toggleInspector()
     }
 
     @IBAction func newTask(_ sender: Any?) {

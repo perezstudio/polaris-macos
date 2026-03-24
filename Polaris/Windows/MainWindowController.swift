@@ -63,10 +63,6 @@ final class MainWindowController: NSWindowController {
     func toggleSidebar() {
         splitViewController?.toggleSidebar()
     }
-
-    func toggleInspector() {
-        splitViewController?.toggleInspector()
-    }
 }
 
 // MARK: - NSWindowDelegate

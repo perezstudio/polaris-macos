@@ -2,7 +2,7 @@
 //  SelectionStore.swift
 //  Polaris
 //
-//  Holds the current selection state shared across sidebar, content, and inspector panels.
+//  Holds the current selection state shared across sidebar and content panels.
 //
 
 import Foundation

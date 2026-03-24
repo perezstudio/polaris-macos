@@ -5,22 +5,31 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Project.createdAt) private var projects: [Project]
+    @Query(sort: \Project.sortOrder) private var projects: [Project]
 
     let selectionStore: SelectionStore
     let windowState: WindowStateModel
     var onToggleSidebar: (() -> Void)?
 
     @State private var editingProject: Project?
+    @State private var renamingProjectId: PersistentIdentifier?
+    @State private var orderedProjects: [Project] = []
+    @State private var draggedProjectId: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            addProjectButton
-            projectList
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    addProjectButton
+                    projectList
+                }
+                .padding(.vertical, 4)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VisualEffectBackground(material: .sidebar))
@@ -28,6 +37,8 @@ struct SidebarView: View {
         .sheet(item: $editingProject) { project in
             ProjectEditSheet(project: project)
         }
+        .onAppear { orderedProjects = projects }
+        .onChange(of: projects.map(\.id)) { _, _ in orderedProjects = projects }
     }
 
     // MARK: - Header
@@ -54,50 +65,132 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 10)
-        .padding(.top, 4)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
     }
 
     // MARK: - Project List
 
     private var projectList: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(projects) { project in
-                    ProjectRowView(
-                        project: project,
-                        isSelected: selectionStore.selectedProject?.id == project.id,
-                        onSelect: {
-                            selectionStore.selectedProject = project
-                            selectionStore.selectedTodo = nil
-                        },
-                        onEdit: {
-                            editingProject = project
-                        },
-                        onDelete: {
-                            deleteProject(project)
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(orderedProjects) { project in
+                let isBeingDragged = project.id == draggedProjectId
+
+                ProjectRowView(
+                    project: project,
+                    isSelected: selectionStore.selectedProject?.id == project.id,
+                    isEditing: renamingProjectId == project.persistentModelID,
+                    onSelect: {
+                        if renamingProjectId != nil {
+                            commitRename()
                         }
-                    )
-                    .padding(.horizontal, 10)
+                        selectionStore.selectedProject = project
+                        selectionStore.selectedTodo = nil
+                    },
+                    onEdit: {
+                        editingProject = project
+                    },
+                    onDelete: {
+                        deleteProject(project)
+                    },
+                    onCommitRename: {
+                        commitRename()
+                    }
+                )
+                .padding(.horizontal, 10)
+                .opacity(isBeingDragged ? 0.35 : 1.0)
+                .scaleEffect(isBeingDragged ? 0.95 : 1.0)
+                .onDrag {
+                    draggedProjectId = project.id
+                    return NSItemProvider(object: project.id.uuidString as NSString)
                 }
+                .onDrop(of: [.text], delegate: ProjectDropDelegate(
+                    targetProjectId: project.id,
+                    orderedProjects: $orderedProjects,
+                    draggedProjectId: $draggedProjectId,
+                    modelContext: modelContext
+                ))
             }
-            .padding(.vertical, 4)
         }
     }
 
     // MARK: - Actions
 
     private func addProject() {
-        let project = Project(name: "New Project")
+        commitRename()
+
+        let maxOrder = projects.map(\.sortOrder).max() ?? -1
+        let project = Project(name: "New Project", sortOrder: maxOrder + 1)
         modelContext.insert(project)
         selectionStore.selectedProject = project
+        selectionStore.selectedTodo = nil
+
+        renamingProjectId = project.persistentModelID
+    }
+
+    private func commitRename() {
+        guard renamingProjectId != nil else { return }
+        if let project = projects.first(where: { $0.persistentModelID == renamingProjectId }),
+           project.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            project.name = "New Project"
+        }
+        renamingProjectId = nil
+        try? modelContext.save()
     }
 
     private func deleteProject(_ project: Project) {
+        if renamingProjectId == project.persistentModelID {
+            renamingProjectId = nil
+        }
         if selectionStore.selectedProject?.id == project.id {
             selectionStore.selectedProject = nil
             selectionStore.selectedTodo = nil
         }
         modelContext.delete(project)
+
+        DispatchQueue.main.async {
+            for (i, p) in projects.enumerated() {
+                p.sortOrder = i
+            }
+            try? modelContext.save()
+        }
+    }
+}
+
+// MARK: - Drop Delegate
+
+private struct ProjectDropDelegate: DropDelegate {
+    let targetProjectId: UUID
+    @Binding var orderedProjects: [Project]
+    @Binding var draggedProjectId: UUID?
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedProjectId,
+              draggedId != targetProjectId,
+              let fromIndex = orderedProjects.firstIndex(where: { $0.id == draggedId }),
+              let toIndex = orderedProjects.firstIndex(where: { $0.id == targetProjectId }) else { return }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            orderedProjects.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        for (i, project) in orderedProjects.enumerated() {
+            project.sortOrder = i
+        }
+        try? modelContext.save()
+        draggedProjectId = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {
+        // No-op — items are already in the right position
     }
 }
 

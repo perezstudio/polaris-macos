@@ -12,12 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: MainWindowController?
 
     lazy var modelContainer: ModelContainer = {
-        let schema = Schema([
-            Project.self,
-            Todo.self,
-            Tag.self,
-            ChecklistItem.self
-        ])
+        let schema = Schema(versionedSchema: PolarisSchema.self)
 
         let modelConfiguration = ModelConfiguration(
             "Polaris",
@@ -27,7 +22,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(
+                for: schema,
+                migrationPlan: PolarisMigrationPlan.self,
+                configurations: [modelConfiguration]
+            )
         } catch {
             // Schema changed and the existing store can't be migrated — delete and retry
             print("⚠️ SwiftData migration failed, resetting store: \(error)")
@@ -36,7 +35,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 try? FileManager.default.removeItem(at: URL(fileURLWithPath: storeURL.path + suffix))
             }
             do {
-                return try ModelContainer(for: schema, configurations: [modelConfiguration])
+                return try ModelContainer(
+                    for: schema,
+                    migrationPlan: PolarisMigrationPlan.self,
+                    configurations: [modelConfiguration]
+                )
             } catch {
                 fatalError("Could not create ModelContainer after reset: \(error)")
             }
@@ -97,10 +100,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let sidebarItem = NSMenuItem(title: "Toggle Sidebar", action: #selector(MainSplitViewController.toggleSidebarMenu(_:)), keyEquivalent: "1")
         sidebarItem.keyEquivalentModifierMask = .command
         viewMenu.addItem(sidebarItem)
-
-        let inspectorItem = NSMenuItem(title: "Toggle Inspector", action: #selector(MainSplitViewController.toggleInspectorMenu(_:)), keyEquivalent: "i")
-        inspectorItem.keyEquivalentModifierMask = .command
-        viewMenu.addItem(inspectorItem)
 
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)

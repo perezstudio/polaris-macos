@@ -11,23 +11,34 @@ struct ProjectDetailView: View {
     let selectionStore: SelectionStore
     let windowState: WindowStateModel
     var onToggleSidebar: (() -> Void)?
-    var onToggleInspector: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
+    @State private var openedTodoId: PersistentIdentifier?
+
+    private var sortedTodos: [Todo] {
+        project.todos.sorted { a, b in
+            if a.isCompleted != b.isCompleted { return !a.isCompleted }
+            return a.sortOrder < b.sortOrder
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header bar
-            headerBar
-
-            Divider()
-
-            // Task list
+        ZStack(alignment: .top) {
             taskList
+
+            VStack(spacing: 0) {
+                headerBar
+                    .background(VisualEffectBackground(material: .titlebar))
+                Divider()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.polarisWindowBackground)
         .ignoresSafeArea(edges: .top)
+        .onKeyPress(.upArrow) { navigateSelection(direction: -1); return .handled }
+        .onKeyPress(.downArrow) { navigateSelection(direction: 1); return .handled }
+        .onKeyPress(.return) { toggleOpenCard(); return .handled }
+        .onKeyPress(.escape) { closeCard(); return .handled }
     }
 
     // MARK: - Header
@@ -47,7 +58,7 @@ struct ProjectDetailView: View {
             Image(systemName: project.icon)
                 .font(.appScaled(size: 14))
                 .foregroundStyle(Color.fromString(project.color))
-                .padding(.leading, windowState.isSidebarCollapsed ? 4 : 4)
+                .padding(.leading, 4)
 
             Text(project.name)
                 .font(.appScaled(size: 13, weight: .medium))
@@ -62,16 +73,6 @@ struct ProjectDetailView: View {
                     .font(.appScaled(size: 14))
             }
             .buttonStyle(.polarisHover(size: .large))
-
-            if windowState.isInspectorCollapsed {
-                Button {
-                    onToggleInspector?()
-                } label: {
-                    Image(systemName: "sidebar.trailing")
-                        .font(.appScaled(size: 14))
-                }
-                .buttonStyle(.polarisHover(size: .large))
-            }
         }
         .padding(.horizontal, 8)
         .frame(height: 52)
@@ -82,28 +83,83 @@ struct ProjectDetailView: View {
     private var taskList: some View {
         ScrollView {
             LazyVStack(spacing: 1) {
-                let sortedTodos = project.todos.sorted { a, b in
-                    if a.isCompleted != b.isCompleted { return !a.isCompleted }
-                    return a.sortOrder < b.sortOrder
-                }
-
                 ForEach(sortedTodos) { todo in
-                    TaskRowView(
-                        todo: todo,
-                        isSelected: selectionStore.selectedTodo?.id == todo.id,
-                        onSelect: {
-                            selectionStore.selectedTodo = todo
+                    let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
+                    let isOpen = openedTodoId == todo.persistentModelID
+
+                    if isOpen {
+                        TaskCardView(todo: todo) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                openedTodoId = nil
+                            }
                         }
-                    )
-                    .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            deleteTodo(todo)
+                        .padding(.vertical, 4)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    } else {
+                        TaskRowView(
+                            todo: todo,
+                            isSelected: isSelected,
+                            onSelect: {
+                                selectionStore.selectedTodo = todo
+                            },
+                            onDoubleClick: {
+                                openCard(for: todo)
+                            }
+                        )
+                        .contextMenu {
+                            Button("Delete", role: .destructive) {
+                                deleteTodo(todo)
+                            }
                         }
                     }
                 }
             }
+            .frame(maxWidth: 800)
             .padding(.horizontal, 12)
-            .padding(.top, 8)
+            .padding(.top, 60)
+        }
+    }
+
+    // MARK: - Keyboard Navigation
+
+    private func navigateSelection(direction: Int) {
+        let todos = sortedTodos
+        guard !todos.isEmpty else { return }
+
+        guard let current = selectionStore.selectedTodo,
+              let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
+            selectionStore.selectedTodo = todos.first
+            return
+        }
+
+        let newIndex = currentIndex + direction
+        guard newIndex >= 0 && newIndex < todos.count else { return }
+        selectionStore.selectedTodo = todos[newIndex]
+    }
+
+    private func toggleOpenCard() {
+        guard let todo = selectionStore.selectedTodo else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if openedTodoId == todo.persistentModelID {
+                openedTodoId = nil
+            } else {
+                openedTodoId = todo.persistentModelID
+            }
+        }
+    }
+
+    private func openCard(for todo: Todo) {
+        selectionStore.selectedTodo = todo
+        withAnimation(.easeInOut(duration: 0.2)) {
+            openedTodoId = todo.persistentModelID
+        }
+    }
+
+    private func closeCard() {
+        if openedTodoId != nil {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                openedTodoId = nil
+            }
         }
     }
 
@@ -117,7 +173,10 @@ struct ProjectDetailView: View {
     }
 
     private func deleteTodo(_ todo: Todo) {
-        if selectionStore.selectedTodo?.id == todo.id {
+        if openedTodoId == todo.persistentModelID {
+            openedTodoId = nil
+        }
+        if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
             selectionStore.selectedTodo = nil
         }
         modelContext.delete(todo)

@@ -9,6 +9,7 @@ struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
     var onSelect: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
 
     @State private var isHovered = false
 
@@ -39,11 +40,6 @@ struct TaskRowView: View {
 
             Spacer()
 
-            // Priority indicator
-            if todo.priority != .low {
-                priorityBadge
-            }
-
             // Due date
             if let dueDate = todo.dueDate {
                 Text(dueDate, style: .date)
@@ -63,6 +59,11 @@ struct TaskRowView: View {
                     )
                     .foregroundStyle(Color.fromString(tag.color))
             }
+
+            // Priority indicator
+            if todo.priority != .low {
+                priorityBadge
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -74,11 +75,15 @@ struct TaskRowView: View {
                     Color.clear
                 )
         )
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            onDoubleClick?()
+        }
+        .onTapGesture(count: 1) {
+            onSelect?()
+        }
         .onHover { hovering in
             isHovered = hovering
-        }
-        .onTapGesture {
-            onSelect?()
         }
     }
 

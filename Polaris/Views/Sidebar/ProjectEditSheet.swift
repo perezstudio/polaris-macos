@@ -9,10 +9,7 @@ struct ProjectEditSheet: View {
     @Bindable var project: Project
     @Environment(\.dismiss) private var dismiss
 
-    private let availableColors = [
-        "red", "orange", "yellow", "green", "mint", "teal",
-        "cyan", "blue", "indigo", "purple", "pink", "brown", "gray"
-    ]
+    private let availableColors = ProjectColor.allCases
 
     private let availableIcons = [
         "folder.fill", "star.fill", "heart.fill", "bolt.fill",
@@ -84,15 +81,15 @@ struct ProjectEditSheet: View {
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 6) {
-                    ForEach(availableColors, id: \.self) { color in
+                    ForEach(availableColors, id: \.self) { pc in
                         Button {
-                            project.color = color
+                            project.color = pc.rawValue
                         } label: {
                             Circle()
-                                .fill(Color.fromString(color))
+                                .fill(pc.color)
                                 .frame(width: 22, height: 22)
                                 .overlay {
-                                    if project.color == color {
+                                    if project.color == pc.rawValue {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.white)

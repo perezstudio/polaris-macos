@@ -3,18 +3,22 @@
 //  Polaris
 //
 //  Project row in the sidebar with icon, name, and hover ellipsis menu.
+//  Supports inline name editing for newly created projects.
 //
 
 import SwiftUI
 
 struct ProjectRowView: View {
-    let project: Project
+    @Bindable var project: Project
     let isSelected: Bool
+    let isEditing: Bool
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+    let onCommitRename: () -> Void
 
     @State private var isHovered = false
+    @FocusState private var nameFieldFocused: Bool
 
     private var projectColor: Color {
         Color.fromString(project.color)
@@ -30,14 +34,28 @@ struct ProjectRowView: View {
                 .foregroundStyle(projectColor)
                 .frame(width: 18)
 
-            Text(project.name)
-                .font(.appScaled(size: 14, weight: .semibold))
-                .lineLimit(1)
-                .padding(.leading, 6)
+            if isEditing {
+                TextField("New Project", text: $project.name)
+                    .font(.appScaled(size: 14, weight: .semibold))
+                    .textFieldStyle(.plain)
+                    .padding(.leading, 6)
+                    .focused($nameFieldFocused)
+                    .onSubmit {
+                        onCommitRename()
+                    }
+                    .onAppear {
+                        nameFieldFocused = true
+                    }
+            } else {
+                Text(project.name)
+                    .font(.appScaled(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                    .padding(.leading, 6)
+            }
 
             Spacer(minLength: 0)
 
-            if isHovered {
+            if isHovered && !isEditing {
                 let todoCount = project.todos.filter { !$0.isCompleted }.count
                 if todoCount > 0 {
                     Text("\(todoCount)")
@@ -101,29 +119,6 @@ struct ProjectRowView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
-        }
-    }
-}
-
-// MARK: - Color from String
-
-extension Color {
-    static func fromString(_ string: String) -> Color {
-        switch string.lowercased() {
-        case "red": return .red
-        case "orange": return .orange
-        case "yellow": return .yellow
-        case "green": return .green
-        case "mint": return .mint
-        case "teal": return .teal
-        case "cyan": return .cyan
-        case "blue": return .blue
-        case "indigo": return .indigo
-        case "purple": return .purple
-        case "pink": return .pink
-        case "brown": return .brown
-        case "gray", "grey": return .gray
-        default: return .blue
         }
     }
 }
