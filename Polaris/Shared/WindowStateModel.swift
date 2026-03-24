@@ -11,4 +11,5 @@ import Foundation
 @Observable
 final class WindowStateModel {
     var isSidebarCollapsed: Bool = false
+    var isInspectorCollapsed: Bool = false
 }

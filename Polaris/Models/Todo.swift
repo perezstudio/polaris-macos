@@ -7,6 +7,7 @@ import Foundation
 import SwiftData
 
 enum Priority: Int, Codable, CaseIterable {
+    case none = -1
     case low = 0
     case medium = 1
     case high = 2
@@ -14,6 +15,7 @@ enum Priority: Int, Codable, CaseIterable {
 
     var label: String {
         switch self {
+        case .none: "None"
         case .low: "Low"
         case .medium: "Medium"
         case .high: "High"
@@ -23,6 +25,7 @@ enum Priority: Int, Codable, CaseIterable {
 
     var color: String {
         switch self {
+        case .none: "gray"
         case .low: "gray"
         case .medium: "blue"
         case .high: "orange"
@@ -51,7 +54,7 @@ final class Todo {
     var tags: [Tag] = []
 
     var priority: Priority {
-        get { Priority(rawValue: priorityRawValue) ?? .medium }
+        get { Priority(rawValue: priorityRawValue) ?? .none }
         set { priorityRawValue = newValue.rawValue }
     }
 
@@ -59,7 +62,7 @@ final class Todo {
         title: String,
         note: String = "",
         isCompleted: Bool = false,
-        priority: Priority = .medium,
+        priority: Priority = .none,
         sortOrder: Int = 0
     ) {
         self.title = title

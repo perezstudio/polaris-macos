@@ -15,11 +15,17 @@ struct LiveMarkdownEditor: NSViewRepresentable {
     @Binding var text: String
     let baseFontSize: CGFloat
     let maxContentWidth: CGFloat?
+    let growsVertically: Bool
+    let placeholder: String?
+    let compactInsets: Bool
 
-    init(text: Binding<String>, baseFontSize: CGFloat = 12, maxContentWidth: CGFloat? = nil) {
+    init(text: Binding<String>, baseFontSize: CGFloat = 12, maxContentWidth: CGFloat? = nil, growsVertically: Bool = false, placeholder: String? = nil, compactInsets: Bool = false) {
         self._text = text
         self.baseFontSize = baseFontSize
         self.maxContentWidth = maxContentWidth
+        self.growsVertically = growsVertically
+        self.placeholder = placeholder
+        self.compactInsets = compactInsets
     }
 
     func makeCoordinator() -> Coordinator {
@@ -27,8 +33,8 @@ struct LiveMarkdownEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
+        let scrollView = growsVertically ? GrowingScrollView() : NSScrollView()
+        scrollView.hasVerticalScroller = !growsVertically
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -44,10 +50,19 @@ struct LiveMarkdownEditor: NSViewRepresentable {
         textView.usesFontPanel = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-        textView.textContainerInset = NSSize(width: 16, height: 32)
+        textView.textContainerInset = compactInsets ? NSSize(width: 0, height: 4) : NSSize(width: 16, height: 32)
         textView.textContainer?.widthTracksTextView = true
         textView.autoresizingMask = [.width]
         textView.maxContentWidth = maxContentWidth
+
+        if growsVertically {
+            textView.growsVertically = true
+            context.coordinator.growsVertically = true
+        }
+
+        if let placeholder {
+            textView.placeholderString = placeholder
+        }
 
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
@@ -57,6 +72,12 @@ struct LiveMarkdownEditor: NSViewRepresentable {
         // Set initial text and apply styling
         textView.string = text
         applyMarkdownStyling(to: textView)
+
+        if growsVertically {
+            DispatchQueue.main.async {
+                context.coordinator.updateScrollViewHeight(scrollView)
+            }
+        }
 
         return scrollView
     }
@@ -247,6 +268,7 @@ struct LiveMarkdownEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         let parent: LiveMarkdownEditor
         var isUpdating = false
+        var growsVertically = false
         weak var textView: MarkdownTextView?
 
         init(_ parent: LiveMarkdownEditor) {
@@ -263,8 +285,34 @@ struct LiveMarkdownEditor: NSViewRepresentable {
             parent.applyMarkdownStyling(to: textView)
             textView.selectedRanges = selectedRanges
 
+            if growsVertically, let scrollView = textView.enclosingScrollView {
+                updateScrollViewHeight(scrollView)
+            }
+
             isUpdating = false
         }
+
+        func updateScrollViewHeight(_ scrollView: NSScrollView) {
+            scrollView.invalidateIntrinsicContentSize()
+        }
+    }
+}
+
+// MARK: - GrowingScrollView
+
+final class GrowingScrollView: NSScrollView {
+    override var intrinsicContentSize: NSSize {
+        guard let textView = documentView as? NSTextView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return super.intrinsicContentSize
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let inset = textView.textContainerInset
+        let height = max(40, usedRect.height + inset.height * 2)
+        let width = bounds.width > 0 ? bounds.width : 200
+        return NSSize(width: width, height: height)
     }
 }
 
@@ -272,11 +320,46 @@ struct LiveMarkdownEditor: NSViewRepresentable {
 
 final class MarkdownTextView: NSTextView {
     var maxContentWidth: CGFloat?
+    var growsVertically: Bool = false
+    var placeholderString: String?
     private let minHorizontalInset: CGFloat = 16
 
     override func didChangeText() {
         super.didChangeText()
         invalidateIntrinsicContentSize()
+        if growsVertically {
+            enclosingScrollView?.invalidateIntrinsicContentSize()
+        }
+        needsDisplay = true // redraw placeholder
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        needsDisplay = true
+        return result
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let result = super.resignFirstResponder()
+        needsDisplay = true
+        return result
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        if string.isEmpty, let placeholder = placeholderString {
+            let inset = textContainerInset
+            let containerOrigin = NSPoint(
+                x: inset.width + (textContainer?.lineFragmentPadding ?? 5),
+                y: inset.height
+            )
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: font?.pointSize ?? 13),
+                .foregroundColor: NSColor.placeholderTextColor
+            ]
+            (placeholder as NSString).draw(at: containerOrigin, withAttributes: attrs)
+        }
     }
 
     override func layout() {

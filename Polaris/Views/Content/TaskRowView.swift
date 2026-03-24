@@ -9,7 +9,6 @@ struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
     var onSelect: (() -> Void)?
-    var onDoubleClick: (() -> Void)?
 
     @State private var isHovered = false
 
@@ -25,6 +24,19 @@ struct TaskRowView: View {
             }
             .buttonStyle(.plain)
 
+            // Due date badge (between checkbox and title)
+            if let dueDate = todo.dueDate {
+                Text(relativeDate(dueDate))
+                    .font(.appScaled(size: 10, weight: .medium))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(dueDateColor(dueDate).opacity(0.12))
+                    )
+                    .foregroundStyle(dueDateColor(dueDate))
+            }
+
             // Title
             if todo.title.isEmpty && isSelected {
                 TextField("New Task", text: $todo.title)
@@ -38,14 +50,26 @@ struct TaskRowView: View {
                     .lineLimit(1)
             }
 
-            Spacer()
-
-            // Due date
-            if let dueDate = todo.dueDate {
-                Text(dueDate, style: .date)
+            // Notes / checklist indicators
+            if !todo.note.isEmpty {
+                Image(systemName: "note.text")
                     .font(.appScaled(size: 11))
-                    .foregroundStyle(isPastDue(dueDate) ? .red : .secondary)
+                    .foregroundStyle(.tertiary)
             }
+
+            if !todo.checklistItems.isEmpty {
+                let completed = todo.checklistItems.filter(\.isCompleted).count
+                let total = todo.checklistItems.count
+                HStack(spacing: 2) {
+                    Image(systemName: "checklist")
+                        .font(.appScaled(size: 11))
+                    Text("\(completed)/\(total)")
+                        .font(.appScaled(size: 10))
+                }
+                .foregroundStyle(completed == total ? Color.green : Color(nsColor: .tertiaryLabelColor))
+            }
+
+            Spacer()
 
             // Tag pills
             ForEach(todo.tags) { tag in
@@ -61,8 +85,19 @@ struct TaskRowView: View {
             }
 
             // Priority indicator
-            if todo.priority != .low {
+            if todo.priority != .none {
                 priorityBadge
+            }
+
+            // Deadline (right edge)
+            if let deadline = todo.deadlineDate {
+                HStack(spacing: 3) {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.appScaled(size: 11))
+                    Text(relativeDate(deadline))
+                        .font(.appScaled(size: 11))
+                }
+                .foregroundStyle(dueDateColor(deadline))
             }
         }
         .padding(.horizontal, 8)
@@ -76,15 +111,8 @@ struct TaskRowView: View {
                 )
         )
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            onDoubleClick?()
-        }
-        .onTapGesture(count: 1) {
-            onSelect?()
-        }
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .onTapGesture { onSelect?() }
+        .onHover { isHovered = $0 }
     }
 
     private var priorityBadge: some View {
@@ -95,6 +123,7 @@ struct TaskRowView: View {
 
     private var priorityIcon: String {
         switch todo.priority {
+        case .none: "minus"
         case .low: "arrow.down"
         case .medium: "minus"
         case .high: "arrow.up"
@@ -103,6 +132,40 @@ struct TaskRowView: View {
     }
 
     private func isPastDue(_ date: Date) -> Bool {
-        date < Date() && !todo.isCompleted
+        Calendar.current.startOfDay(for: date) < Calendar.current.startOfDay(for: Date()) && !todo.isCompleted
+    }
+
+    private func isToday(_ date: Date) -> Bool {
+        Calendar.current.isDateInToday(date)
+    }
+
+    private func dueDateColor(_ date: Date) -> Color {
+        if isPastDue(date) { return .red }
+        if isToday(date) { return .yellow }
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
+        if days == 1 { return .orange }
+        return .secondary
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let target = calendar.startOfDay(for: date)
+        let days = calendar.dateComponents([.day], from: today, to: target).day ?? 0
+
+        switch days {
+        case ..<(-1): return "\(abs(days))d ago"
+        case -1: return "Yesterday"
+        case 0: return "Today"
+        case 1: return "Tomorrow"
+        case 2...6:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date)
+        default:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: date)
+        }
     }
 }

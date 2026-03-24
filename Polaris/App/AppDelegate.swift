@@ -101,6 +101,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sidebarItem.keyEquivalentModifierMask = .command
         viewMenu.addItem(sidebarItem)
 
+        let inspectorItem = NSMenuItem(title: "Toggle Inspector", action: #selector(MainSplitViewController.toggleInspectorMenu(_:)), keyEquivalent: "i")
+        inspectorItem.keyEquivalentModifierMask = .command
+        viewMenu.addItem(inspectorItem)
+
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 

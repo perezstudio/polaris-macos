@@ -11,9 +11,10 @@ struct ProjectDetailView: View {
     let selectionStore: SelectionStore
     let windowState: WindowStateModel
     var onToggleSidebar: (() -> Void)?
+    var onToggleInspector: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
-    @State private var openedTodoId: PersistentIdentifier?
+    @FocusState private var isListFocused: Bool
 
     private var sortedTodos: [Todo] {
         project.todos.sorted { a, b in
@@ -24,21 +25,45 @@ struct ProjectDetailView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            // Click-off background to deselect
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { deselectTask() }
+
             taskList
 
             VStack(spacing: 0) {
                 headerBar
-                    .background(VisualEffectBackground(material: .titlebar))
+                    .background(VisualEffectBackground(material: .headerView, blendingMode: .withinWindow))
                 Divider()
             }
+            .zIndex(1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.polarisWindowBackground)
+        .background(Color.white.ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
-        .onKeyPress(.upArrow) { navigateSelection(direction: -1); return .handled }
-        .onKeyPress(.downArrow) { navigateSelection(direction: 1); return .handled }
-        .onKeyPress(.return) { toggleOpenCard(); return .handled }
-        .onKeyPress(.escape) { closeCard(); return .handled }
+        .focusable()
+        .focused($isListFocused)
+        .focusEffectDisabled()
+        .onAppear { isListFocused = true }
+        .onKeyPress(.upArrow) {
+            navigateSelection(direction: -1)
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            navigateSelection(direction: 1)
+            return .handled
+        }
+        .onKeyPress(.return) {
+            if let todo = selectionStore.selectedTodo {
+                expandInspector(for: todo)
+            }
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            deselectTask()
+            return .handled
+        }
     }
 
     // MARK: - Header
@@ -73,6 +98,16 @@ struct ProjectDetailView: View {
                     .font(.appScaled(size: 14))
             }
             .buttonStyle(.polarisHover(size: .large))
+
+            if windowState.isInspectorCollapsed {
+                Button {
+                    onToggleInspector?()
+                } label: {
+                    Image(systemName: "sidebar.trailing")
+                        .font(.appScaled(size: 14))
+                }
+                .buttonStyle(.polarisHover(size: .large))
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 52)
@@ -80,30 +115,37 @@ struct ProjectDetailView: View {
 
     // MARK: - Task List
 
+    @ViewBuilder
     private var taskList: some View {
-        ScrollView {
-            LazyVStack(spacing: 1) {
-                ForEach(sortedTodos) { todo in
-                    let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-                    let isOpen = openedTodoId == todo.persistentModelID
+        if sortedTodos.isEmpty {
+            VStack(spacing: 12) {
+                Spacer()
+                Image(systemName: "checklist")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.tertiary)
+                Text("No tasks yet")
+                    .font(.appScaled(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Button("Add Task") {
+                    addTodo()
+                }
+                .controlSize(.small)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(sortedTodos) { todo in
+                        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
 
-                    if isOpen {
-                        TaskCardView(todo: todo) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                openedTodoId = nil
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    } else {
                         TaskRowView(
                             todo: todo,
                             isSelected: isSelected,
                             onSelect: {
                                 selectionStore.selectedTodo = todo
-                            },
-                            onDoubleClick: {
-                                openCard(for: todo)
+                                isListFocused = true
+                                expandInspector(for: todo)
                             }
                         )
                         .contextMenu {
@@ -113,10 +155,12 @@ struct ProjectDetailView: View {
                         }
                     }
                 }
+                .frame(maxWidth: 800)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 68)
+                .padding(.bottom, 24)
             }
-            .frame(maxWidth: 800)
-            .padding(.horizontal, 12)
-            .padding(.top, 60)
         }
     }
 
@@ -129,38 +173,29 @@ struct ProjectDetailView: View {
         guard let current = selectionStore.selectedTodo,
               let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
             selectionStore.selectedTodo = todos.first
+            if let first = todos.first { expandInspector(for: first) }
             return
         }
 
         let newIndex = currentIndex + direction
         guard newIndex >= 0 && newIndex < todos.count else { return }
         selectionStore.selectedTodo = todos[newIndex]
+        expandInspector(for: todos[newIndex])
     }
 
-    private func toggleOpenCard() {
-        guard let todo = selectionStore.selectedTodo else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if openedTodoId == todo.persistentModelID {
-                openedTodoId = nil
-            } else {
-                openedTodoId = todo.persistentModelID
-            }
-        }
-    }
-
-    private func openCard(for todo: Todo) {
+    private func expandInspector(for todo: Todo) {
         selectionStore.selectedTodo = todo
-        withAnimation(.easeInOut(duration: 0.2)) {
-            openedTodoId = todo.persistentModelID
+        if windowState.isInspectorCollapsed {
+            onToggleInspector?()
         }
     }
 
-    private func closeCard() {
-        if openedTodoId != nil {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                openedTodoId = nil
-            }
+    private func deselectTask() {
+        selectionStore.selectedTodo = nil
+        if !windowState.isInspectorCollapsed {
+            onToggleInspector?()
         }
+        isListFocused = true
     }
 
     // MARK: - Actions
@@ -170,12 +205,11 @@ struct ProjectDetailView: View {
         todo.project = project
         modelContext.insert(todo)
         selectionStore.selectedTodo = todo
+        expandInspector(for: todo)
+        isListFocused = true
     }
 
     private func deleteTodo(_ todo: Todo) {
-        if openedTodoId == todo.persistentModelID {
-            openedTodoId = nil
-        }
         if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
             selectionStore.selectedTodo = nil
         }
