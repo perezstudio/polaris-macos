@@ -148,6 +148,11 @@ struct ProjectDetailView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { deselectTask() }
                 }
+                .onDrop(of: [.text], delegate: TodoListDropDelegate(
+                    orderedTodos: $orderedTodos,
+                    draggedTodoModelID: $draggedTodoModelID,
+                    modelContext: modelContext
+                ))
             }
             .onAppear { orderedTodos = sortedTodos }
             .onChange(of: project.todos) { orderedTodos = sortedTodos }
@@ -276,5 +281,27 @@ private struct TodoDropDelegate: DropDelegate {
 
     func dropExited(info: DropInfo) {
         // No-op — items are already in the right position
+    }
+}
+
+// MARK: - List-level Drop Delegate (catches drops on whitespace)
+
+private struct TodoListDropDelegate: DropDelegate {
+    @Binding var orderedTodos: [Todo]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    let modelContext: ModelContext
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggedTodoModelID != nil else { return false }
+        for (i, todo) in orderedTodos.enumerated() {
+            todo.sortOrder = i
+        }
+        try? modelContext.save()
+        draggedTodoModelID = nil
+        return true
     }
 }
