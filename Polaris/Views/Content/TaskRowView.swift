@@ -9,9 +9,14 @@ import SwiftData
 struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
+    var startInEditMode: Bool = false
     var onSelect: (() -> Void)?
+    var onEditModeStarted: (() -> Void)?
 
     @State private var isHovered = false
+    @State private var isEditing = false
+    @State private var editingTitle = ""
+    @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -39,16 +44,23 @@ struct TaskRowView: View {
             }
 
             // Title
-            if todo.title.isEmpty && isSelected {
-                TextField("New Task", text: $todo.title)
+            if isEditing {
+                TextField("New Task", text: $editingTitle)
                     .textFieldStyle(.plain)
                     .font(.appScaled(size: 13))
+                    .focused($titleFieldFocused)
+                    .onSubmit { commitEdit() }
+                    .onExitCommand { cancelEdit() }
+                    .onChange(of: titleFieldFocused) { _, focused in
+                        if !focused { commitEdit() }
+                    }
             } else {
                 Text(todo.title.isEmpty ? "Untitled" : todo.title)
                     .font(.appScaled(size: 13))
                     .foregroundStyle(todo.isCompleted ? .secondary : .primary)
                     .strikethrough(todo.isCompleted)
                     .lineLimit(1)
+                    .onTapGesture(count: 2) { startEditing() }
             }
 
             // Notes / checklist indicators
@@ -117,6 +129,28 @@ struct TaskRowView: View {
         .contentShape(Rectangle())
         .onTapGesture { onSelect?() }
         .onHover { isHovered = $0 }
+        .onAppear {
+            if startInEditMode {
+                startEditing()
+                onEditModeStarted?()
+            }
+        }
+    }
+
+    private func startEditing() {
+        editingTitle = todo.title
+        isEditing = true
+        titleFieldFocused = true
+    }
+
+    private func commitEdit() {
+        guard isEditing else { return }
+        todo.title = editingTitle
+        isEditing = false
+    }
+
+    private func cancelEdit() {
+        isEditing = false
     }
 
     private var priorityBadge: some View {

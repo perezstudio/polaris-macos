@@ -18,6 +18,7 @@ struct ProjectDetailView: View {
     @FocusState private var isListFocused: Bool
     @State private var draggedTodoModelID: PersistentIdentifier?
     @State private var orderedTodos: [Todo] = []
+    @State private var newlyCreatedTodoID: PersistentIdentifier?
 
     private var sortedTodos: [Todo] {
         project.todos.sorted { a, b in
@@ -175,10 +176,14 @@ struct ProjectDetailView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: {
                 selectionStore.selectedTodo = todo
                 isListFocused = true
                 expandInspector(for: todo)
+            },
+            onEditModeStarted: {
+                newlyCreatedTodoID = nil
             }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
@@ -241,6 +246,7 @@ struct ProjectDetailView: View {
         todo.project = project
         modelContext.insert(todo)
         selectionStore.selectedTodo = todo
+        newlyCreatedTodoID = todo.persistentModelID
         expandInspector(for: todo)
     }
 
