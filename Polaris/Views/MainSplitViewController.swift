@@ -12,16 +12,9 @@ final class MainSplitViewController: NSSplitViewController {
     private let windowState = WindowStateModel()
     private let selectionStore = SelectionStore()
 
-    private var sidebarHostingVC: NSViewController!
-    private var emptyStateHostingVC: NSViewController!
-    private var inspectorHostingVC: NSViewController!
-
     private var sidebarItem: NSSplitViewItem!
     private var contentItem: NSSplitViewItem!
     private var inspectorItem: NSSplitViewItem!
-
-    // Track current project to avoid redundant swaps
-    private var currentProjectId: PersistentIdentifier?
 
     init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
@@ -51,20 +44,30 @@ final class MainSplitViewController: NSSplitViewController {
             }
         )
         .modelContainer(modelContainer)
-        sidebarHostingVC = NSHostingController(rootView: sidebarView)
+        let sidebarVC = NSHostingController(rootView: sidebarView)
 
-        sidebarItem = NSSplitViewItem(viewController: sidebarHostingVC)
+        sidebarItem = NSSplitViewItem(viewController: sidebarVC)
         sidebarItem.canCollapse = true
         sidebarItem.minimumThickness = 200
         sidebarItem.maximumThickness = 300
         sidebarItem.holdingPriority = .defaultLow + 1
         addSplitViewItem(sidebarItem)
 
-        // Content — start with empty state
-        let emptyView = EmptyStateView(windowState: windowState)
-        emptyStateHostingVC = NSHostingController(rootView: emptyView)
+        // Content — single hosting controller, SwiftUI switches between empty/detail
+        let contentView = ContentAreaView(
+            selectionStore: selectionStore,
+            windowState: windowState,
+            onToggleSidebar: { [weak self] in
+                self?.toggleSidebar()
+            },
+            onToggleInspector: { [weak self] in
+                self?.toggleInspector()
+            }
+        )
+        .modelContainer(modelContainer)
+        let contentVC = NSHostingController(rootView: contentView)
 
-        contentItem = NSSplitViewItem(viewController: emptyStateHostingVC)
+        contentItem = NSSplitViewItem(viewController: contentVC)
         contentItem.minimumThickness = 400
         contentItem.holdingPriority = .defaultLow
         addSplitViewItem(contentItem)
@@ -79,31 +82,19 @@ final class MainSplitViewController: NSSplitViewController {
         .modelContainer(modelContainer)
         let inspectorHC = NSHostingController(rootView: inspectorView)
         inspectorHC.sizingOptions = []
-        inspectorHostingVC = inspectorHC
 
-        inspectorItem = NSSplitViewItem(viewController: inspectorHostingVC)
+        inspectorItem = NSSplitViewItem(viewController: inspectorHC)
         inspectorItem.canCollapse = true
         inspectorItem.minimumThickness = 280
         inspectorItem.holdingPriority = .defaultLow + 1
         inspectorItem.isCollapsed = true
         addSplitViewItem(inspectorItem)
 
-        // Observe selection changes
+        // Observe selection for inspector expand/collapse
         setupSelectionObserver()
     }
 
     private func setupSelectionObserver() {
-        func observeProject() {
-            withObservationTracking {
-                _ = selectionStore.selectedProject
-            } onChange: { [weak self] in
-                DispatchQueue.main.async {
-                    self?.handleProjectSelectionChanged()
-                    observeProject()
-                }
-            }
-        }
-
         func observeTodo() {
             withObservationTracking {
                 _ = selectionStore.selectedTodo
@@ -115,38 +106,7 @@ final class MainSplitViewController: NSSplitViewController {
             }
         }
 
-        observeProject()
         observeTodo()
-    }
-
-    private func handleProjectSelectionChanged() {
-        guard let project = selectionStore.selectedProject else {
-            if currentProjectId != nil {
-                currentProjectId = nil
-                swapContentViewController(to: emptyStateHostingVC)
-                collapseInspectorIfNeeded()
-            }
-            return
-        }
-
-        if currentProjectId == project.persistentModelID { return }
-        currentProjectId = project.persistentModelID
-
-        let detailView = ProjectDetailView(
-            project: project,
-            selectionStore: selectionStore,
-            windowState: windowState,
-            onToggleSidebar: { [weak self] in
-                self?.toggleSidebar()
-            },
-            onToggleInspector: { [weak self] in
-                self?.toggleInspector()
-            }
-        )
-        .modelContainer(modelContainer)
-
-        let hostingVC = NSHostingController(rootView: detailView)
-        swapContentViewController(to: hostingVC)
     }
 
     private func handleTodoSelectionChanged() {
@@ -182,35 +142,7 @@ final class MainSplitViewController: NSSplitViewController {
         toggleInspector()
     }
 
-    private func collapseInspectorIfNeeded() {
-        guard !inspectorItem.isCollapsed else { return }
-        toggleInspector()
-    }
-
     private func updateCollapseState() {
-        windowState.isSidebarCollapsed = sidebarItem.isCollapsed
-        windowState.isInspectorCollapsed = inspectorItem.isCollapsed
-    }
-
-    // MARK: - Content Swapping
-
-    private func swapContentViewController(to viewController: NSViewController) {
-        let currentVC = contentItem.viewController
-        if currentVC === viewController { return }
-
-        let inspectorWasCollapsed = inspectorItem.isCollapsed
-
-        removeSplitViewItem(inspectorItem)
-        removeSplitViewItem(contentItem)
-
-        contentItem = NSSplitViewItem(viewController: viewController)
-        contentItem.minimumThickness = 400
-        contentItem.holdingPriority = .defaultLow
-        insertSplitViewItem(contentItem, at: 1)
-
-        inspectorItem.isCollapsed = inspectorWasCollapsed
-        insertSplitViewItem(inspectorItem, at: 2)
-
         windowState.isSidebarCollapsed = sidebarItem.isCollapsed
         windowState.isInspectorCollapsed = inspectorItem.isCollapsed
     }
