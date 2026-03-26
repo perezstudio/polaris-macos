@@ -269,7 +269,7 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 6) {
             if !todo.tags.isEmpty {
                 FlowLayout(spacing: 4) {
-                    ForEach(todo.tags) { tag in
+                    ForEach(todo.tags.sorted(by: { $0.name < $1.name })) { tag in
                         HStack(spacing: 3) {
                             Text(tag.name)
                                 .font(.appScaled(size: 11))

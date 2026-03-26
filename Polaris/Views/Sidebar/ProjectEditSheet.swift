@@ -6,8 +6,12 @@
 import SwiftUI
 
 struct ProjectEditSheet: View {
-    @Bindable var project: Project
+    var project: Project
     @Environment(\.dismiss) private var dismiss
+
+    @State private var name: String = ""
+    @State private var icon: String = ""
+    @State private var color: String = ""
 
     private let availableColors = ProjectColor.allCases
 
@@ -44,7 +48,7 @@ struct ProjectEditSheet: View {
                 Text("NAME")
                     .font(.appScaled(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                TextField("Project name", text: $project.name)
+                TextField("Project name", text: $name)
                     .textFieldStyle(.roundedBorder)
                     .font(.appScaled(size: 13))
             }
@@ -56,18 +60,18 @@ struct ProjectEditSheet: View {
                     .foregroundStyle(.secondary)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 4), count: 8), spacing: 4) {
-                    ForEach(availableIcons, id: \.self) { icon in
+                    ForEach(availableIcons, id: \.self) { ic in
                         Button {
-                            project.icon = icon
+                            icon = ic
                         } label: {
-                            Image(systemName: icon)
+                            Image(systemName: ic)
                                 .font(.system(size: 14))
                                 .frame(width: 32, height: 32)
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
-                                        .fill(project.icon == icon ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.04))
+                                        .fill(icon == ic ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.04))
                                 )
-                                .foregroundStyle(project.icon == icon ? Color.accentColor : .secondary)
+                                .foregroundStyle(icon == ic ? Color.accentColor : .secondary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -80,30 +84,53 @@ struct ProjectEditSheet: View {
                     .font(.appScaled(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 6) {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 4), count: 8), spacing: 4) {
                     ForEach(availableColors, id: \.self) { pc in
                         Button {
-                            project.color = pc.rawValue
+                            color = pc.rawValue
                         } label: {
                             Circle()
                                 .fill(pc.color)
                                 .frame(width: 22, height: 22)
                                 .overlay {
-                                    if project.color == pc.rawValue {
+                                    if color == pc.rawValue {
                                         Image(systemName: "checkmark")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.white)
                                     }
                                 }
+                                .frame(width: 32, height: 32)
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
 
-            Spacer()
+            // Buttons
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Save") {
+                    project.name = name
+                    project.icon = icon
+                    project.color = color
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
         .padding(20)
-        .frame(width: 340, height: 380)
+        .frame(width: 340)
+        .onAppear {
+            name = project.name
+            icon = project.icon
+            color = project.color
+        }
     }
 }

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct ProjectDetailView: View {
     @Bindable var project: Project
@@ -15,6 +16,8 @@ struct ProjectDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @FocusState private var isListFocused: Bool
+    @State private var draggedTodoModelID: PersistentIdentifier?
+    @State private var orderedTodos: [Todo] = []
 
     private var sortedTodos: [Todo] {
         project.todos.sorted { a, b in
@@ -132,23 +135,8 @@ struct ProjectDetailView: View {
             GeometryReader { geometry in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(sortedTodos) { todo in
-                            let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-
-                            TaskRowView(
-                                todo: todo,
-                                isSelected: isSelected,
-                                onSelect: {
-                                    selectionStore.selectedTodo = todo
-                                    isListFocused = true
-                                    expandInspector(for: todo)
-                                }
-                            )
-                            .contextMenu {
-                                Button("Delete", role: .destructive) {
-                                    deleteTodo(todo)
-                                }
-                            }
+                        ForEach(orderedTodos) { todo in
+                            taskRow(for: todo)
                         }
                     }
                     .frame(maxWidth: 800)
@@ -160,6 +148,43 @@ struct ProjectDetailView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { deselectTask() }
                 }
+            }
+            .onAppear { orderedTodos = sortedTodos }
+            .onChange(of: project.todos) { orderedTodos = sortedTodos }
+        }
+    }
+
+    // MARK: - Task Row
+
+    @ViewBuilder
+    private func taskRow(for todo: Todo) -> some View {
+        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
+        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+
+        TaskRowView(
+            todo: todo,
+            isSelected: isSelected,
+            onSelect: {
+                selectionStore.selectedTodo = todo
+                isListFocused = true
+                expandInspector(for: todo)
+            }
+        )
+        .opacity(isBeingDragged ? 0.35 : 1.0)
+        .scaleEffect(isBeingDragged ? 0.95 : 1.0)
+        .onDrag {
+            draggedTodoModelID = todo.persistentModelID
+            return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
+        }
+        .onDrop(of: [.text], delegate: TodoDropDelegate(
+            targetTodoModelID: todo.persistentModelID,
+            orderedTodos: $orderedTodos,
+            draggedTodoModelID: $draggedTodoModelID,
+            modelContext: modelContext
+        ))
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteTodo(todo)
             }
         }
     }
@@ -214,5 +239,42 @@ struct ProjectDetailView: View {
             selectionStore.selectedTodo = nil
         }
         modelContext.delete(todo)
+    }
+}
+
+// MARK: - Drop Delegate
+
+private struct TodoDropDelegate: DropDelegate {
+    let targetTodoModelID: PersistentIdentifier
+    @Binding var orderedTodos: [Todo]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedTodoModelID,
+              draggedId != targetTodoModelID,
+              let fromIndex = orderedTodos.firstIndex(where: { $0.persistentModelID == draggedId }),
+              let toIndex = orderedTodos.firstIndex(where: { $0.persistentModelID == targetTodoModelID }) else { return }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            orderedTodos.move(fromOffsets: IndexSet(integer: fromIndex), toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        for (i, todo) in orderedTodos.enumerated() {
+            todo.sortOrder = i
+        }
+        try? modelContext.save()
+        draggedTodoModelID = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {
+        // No-op — items are already in the right position
     }
 }

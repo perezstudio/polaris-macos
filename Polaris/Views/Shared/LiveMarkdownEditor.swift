@@ -108,13 +108,23 @@ struct LiveMarkdownEditor: NSViewRepresentable {
             let descriptor = NSFont.systemFont(ofSize: scaled).fontDescriptor.withSymbolicTraits(.italic)
             return NSFont(descriptor: descriptor, size: scaled) ?? NSFont.systemFont(ofSize: scaled)
         }()
+        let boldItalicFont: NSFont = {
+            let descriptor = NSFont.systemFont(ofSize: scaled, weight: .semibold).fontDescriptor.withSymbolicTraits(.italic)
+            return NSFont(descriptor: descriptor, size: scaled) ?? NSFont.systemFont(ofSize: scaled, weight: .semibold)
+        }()
         let codeFont = NSFont.monospacedSystemFont(ofSize: scaled - 1, weight: .regular)
         let h1Font = NSFont.systemFont(ofSize: scaled + 4, weight: .bold)
         let h2Font = NSFont.systemFont(ofSize: scaled + 2, weight: .bold)
         let h3Font = NSFont.systemFont(ofSize: scaled + 1, weight: .semibold)
+        let h4Font = NSFont.systemFont(ofSize: scaled, weight: .semibold)
+        let h5Font = NSFont.systemFont(ofSize: scaled - 1, weight: .semibold)
+        let h6Font = NSFont.systemFont(ofSize: scaled - 1, weight: .medium)
         let textColor = NSColor.labelColor
         let syntaxColor = NSColor.tertiaryLabelColor
         let codeBlockBgColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.1)
+        let blockquoteColor = NSColor.secondaryLabelColor
+        let highlightBgColor = NSColor.systemYellow.withAlphaComponent(0.3)
+        let linkColor = NSColor.linkColor
 
         // Reset to body style
         textStorage.beginEditing()
@@ -153,8 +163,34 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 continue
             }
 
+            // Horizontal rules: ---, ***, ___  (with optional spaces)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.count >= 3 {
+                let allDashes = trimmed.allSatisfy({ $0 == "-" || $0 == " " }) && trimmed.contains("-") && trimmed.filter({ $0 == "-" }).count >= 3
+                let allStars = trimmed.allSatisfy({ $0 == "*" || $0 == " " }) && trimmed.contains("*") && trimmed.filter({ $0 == "*" }).count >= 3
+                let allUnders = trimmed.allSatisfy({ $0 == "_" || $0 == " " }) && trimmed.contains("_") && trimmed.filter({ $0 == "_" }).count >= 3
+                if allDashes || allStars || allUnders {
+                    textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: lineRange)
+                    textStorage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: lineRange)
+                    lineStart += lineLength + 1
+                    continue
+                }
+            }
+
             // Headers
-            if line.hasPrefix("### ") {
+            if line.hasPrefix("###### ") {
+                textStorage.addAttribute(.font, value: h6Font, range: lineRange)
+                let markerRange = NSRange(location: lineStart, length: 7)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+            } else if line.hasPrefix("##### ") {
+                textStorage.addAttribute(.font, value: h5Font, range: lineRange)
+                let markerRange = NSRange(location: lineStart, length: 6)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+            } else if line.hasPrefix("#### ") {
+                textStorage.addAttribute(.font, value: h4Font, range: lineRange)
+                let markerRange = NSRange(location: lineStart, length: 5)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+            } else if line.hasPrefix("### ") {
                 textStorage.addAttribute(.font, value: h3Font, range: lineRange)
                 let markerRange = NSRange(location: lineStart, length: 4)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
@@ -168,8 +204,25 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
 
+            // Blockquotes
+            if line.hasPrefix("> ") || line == ">" {
+                let markerLen = line.hasPrefix("> ") ? 2 : 1
+                let markerRange = NSRange(location: lineStart, length: markerLen)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+                // Style the content in blockquote color
+                if lineLength > markerLen {
+                    let contentRange = NSRange(location: lineStart + markerLen, length: lineLength - markerLen)
+                    textStorage.addAttribute(.foregroundColor, value: blockquoteColor, range: contentRange)
+                }
+            }
+
+            // Task lists: - [ ] and - [x] / - [X]
+            if line.hasPrefix("- [ ] ") || line.hasPrefix("- [x] ") || line.hasPrefix("- [X] ") {
+                let markerRange = NSRange(location: lineStart, length: 6)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+            }
             // Bullet points
-            if line.hasPrefix("- ") || line.hasPrefix("* ") {
+            else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
                 let markerRange = NSRange(location: lineStart, length: 2)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
@@ -184,12 +237,42 @@ struct LiveMarkdownEditor: NSViewRepresentable {
             // Inline formatting within this line
             let nsLine = line as NSString
 
-            // Bold **text**
+            // Bold+Italic ***text*** (must come before bold/italic)
             applyInlinePattern(
                 in: textStorage,
                 text: nsLine,
                 lineOffset: lineStart,
-                pattern: "\\*\\*(.+?)\\*\\*",
+                pattern: "\\*\\*\\*(.+?)\\*\\*\\*",
+                contentFont: boldItalicFont,
+                markerColor: syntaxColor
+            )
+
+            // Bold+Italic ___text___
+            applyInlinePattern(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                pattern: "___(.+?)___",
+                contentFont: boldItalicFont,
+                markerColor: syntaxColor
+            )
+
+            // Bold **text** (not inside ***)
+            applyInlinePattern(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                pattern: "(?<!\\*)\\*\\*(?!\\*)(.+?)(?<!\\*)\\*\\*(?!\\*)",
+                contentFont: boldFont,
+                markerColor: syntaxColor
+            )
+
+            // Bold __text__ (not inside ___)
+            applyInlinePattern(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                pattern: "(?<!_)__(?!_)(.+?)(?<!_)__(?!_)",
                 contentFont: boldFont,
                 markerColor: syntaxColor
             )
@@ -204,6 +287,33 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 markerColor: syntaxColor
             )
 
+            // Italic _text_ (not __)
+            applyInlinePattern(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                pattern: "(?<!_)_(?!_)(.+?)(?<!_)_(?!_)",
+                contentFont: italicFont,
+                markerColor: syntaxColor
+            )
+
+            // Strikethrough ~~text~~
+            applyInlineStrikethrough(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                markerColor: syntaxColor
+            )
+
+            // Highlight ==text==
+            applyInlineHighlight(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                markerColor: syntaxColor,
+                highlightColor: highlightBgColor
+            )
+
             // Inline code `text`
             applyInlinePattern(
                 in: textStorage,
@@ -212,6 +322,24 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 pattern: "`([^`]+)`",
                 contentFont: codeFont,
                 markerColor: syntaxColor
+            )
+
+            // Links [text](url)
+            applyInlineLink(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                linkColor: linkColor,
+                markerColor: syntaxColor
+            )
+
+            // Images ![alt](url)
+            applyInlineImage(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                markerColor: syntaxColor,
+                linkColor: linkColor
             )
 
             lineStart += lineLength + 1 // +1 for newline
@@ -255,6 +383,118 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 if markerEnd.length > 0 {
                     textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerEnd)
                 }
+            }
+        }
+    }
+
+    private static func applyInlineStrikethrough(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        markerColor: NSColor
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: "~~(.+?)~~") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 1 else { return }
+            let contentRange = match.range(at: 1)
+            let fullRange = NSRange(location: lineOffset + match.range.location, length: match.range.length)
+            let adjustedContent = NSRange(location: lineOffset + contentRange.location, length: contentRange.length)
+
+            // Strikethrough on the content
+            textStorage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: adjustedContent)
+
+            // Dim the ~~ markers
+            let markerStart = NSRange(location: lineOffset + match.range.location, length: 2)
+            let markerEnd = NSRange(location: lineOffset + contentRange.location + contentRange.length, length: 2)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerStart)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerEnd)
+        }
+    }
+
+    private static func applyInlineHighlight(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        markerColor: NSColor,
+        highlightColor: NSColor
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: "==(.+?)==") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 1 else { return }
+            let contentRange = match.range(at: 1)
+            let adjustedContent = NSRange(location: lineOffset + contentRange.location, length: contentRange.length)
+
+            textStorage.addAttribute(.backgroundColor, value: highlightColor, range: adjustedContent)
+
+            // Dim the == markers
+            let markerStart = NSRange(location: lineOffset + match.range.location, length: 2)
+            let markerEnd = NSRange(location: lineOffset + contentRange.location + contentRange.length, length: 2)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerStart)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerEnd)
+        }
+    }
+
+    private static func applyInlineLink(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        linkColor: NSColor,
+        markerColor: NSColor
+    ) {
+        // Matches [text](url) but not ![text](url)
+        guard let regex = try? NSRegularExpression(pattern: "(?<!!)\\[([^\\]]+)\\]\\(([^)]+)\\)") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 2 else { return }
+            let linkTextRange = match.range(at: 1)
+            let urlRange = match.range(at: 2)
+
+            // Style link text with link color and underline
+            let adjustedLinkText = NSRange(location: lineOffset + linkTextRange.location, length: linkTextRange.length)
+            textStorage.addAttribute(.foregroundColor, value: linkColor, range: adjustedLinkText)
+            textStorage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: adjustedLinkText)
+
+            // Dim the brackets and parentheses
+            let openBracket = NSRange(location: lineOffset + match.range.location, length: 1)
+            let closeBracket = NSRange(location: lineOffset + linkTextRange.location + linkTextRange.length, length: 1)
+            let openParen = NSRange(location: lineOffset + urlRange.location - 1, length: 1)
+            let closeParen = NSRange(location: lineOffset + urlRange.location + urlRange.length, length: 1)
+            let urlAdjusted = NSRange(location: lineOffset + urlRange.location, length: urlRange.length)
+
+            for range in [openBracket, closeBracket, openParen, closeParen, urlAdjusted] {
+                textStorage.addAttribute(.foregroundColor, value: markerColor, range: range)
+            }
+        }
+    }
+
+    private static func applyInlineImage(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        markerColor: NSColor,
+        linkColor: NSColor
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: "!\\[([^\\]]*)\\]\\(([^)]+)\\)") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 2 else { return }
+            let altRange = match.range(at: 1)
+            let urlRange = match.range(at: 2)
+            let fullRange = NSRange(location: lineOffset + match.range.location, length: match.range.length)
+
+            // Dim the whole syntax
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: fullRange)
+
+            // Highlight alt text
+            if altRange.length > 0 {
+                let adjustedAlt = NSRange(location: lineOffset + altRange.location, length: altRange.length)
+                textStorage.addAttribute(.foregroundColor, value: linkColor, range: adjustedAlt)
             }
         }
     }

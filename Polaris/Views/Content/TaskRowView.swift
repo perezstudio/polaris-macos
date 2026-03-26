@@ -72,7 +72,7 @@ struct TaskRowView: View {
             Spacer()
 
             // Tag pills
-            ForEach(todo.tags) { tag in
+            ForEach(todo.tags.sorted(by: { $0.name < $1.name })) { tag in
                 Text(tag.name)
                     .font(.appScaled(size: 10))
                     .padding(.horizontal, 5)
