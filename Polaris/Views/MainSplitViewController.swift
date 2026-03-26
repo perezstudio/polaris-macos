@@ -226,12 +226,7 @@ final class MainSplitViewController: NSSplitViewController {
     }
 
     @IBAction func newTask(_ sender: Any?) {
-        guard let project = selectionStore.selectedProject else { return }
-        let modelContext = ModelContext(modelContainer)
-        let todo = Todo(title: "", sortOrder: project.todos.count)
-        todo.project = project
-        modelContext.insert(todo)
-        try? modelContext.save()
-        selectionStore.selectedTodo = todo
+        guard selectionStore.selectedProject != nil else { return }
+        selectionStore.addTaskRequested = true
     }
 }

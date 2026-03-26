@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct TaskRowView: View {
     @Bindable var todo: Todo
@@ -72,7 +73,10 @@ struct TaskRowView: View {
             Spacer()
 
             // Tag pills
-            ForEach(todo.tags.sorted(by: { $0.name < $1.name })) { tag in
+            ForEach(todo.tags.sorted(by: {
+                if $0.name != $1.name { return $0.name < $1.name }
+                return $0.persistentModelID.hashValue < $1.persistentModelID.hashValue
+            })) { tag in
                 Text(tag.name)
                     .font(.appScaled(size: 10))
                     .padding(.horizontal, 5)

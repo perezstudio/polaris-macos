@@ -12,4 +12,5 @@ import SwiftData
 final class SelectionStore {
     var selectedProject: Project?
     var selectedTodo: Todo?
+    var addTaskRequested = false
 }

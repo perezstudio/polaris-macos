@@ -62,6 +62,12 @@ struct ProjectDetailView: View {
             deselectTask()
             return .handled
         }
+        .onChange(of: selectionStore.addTaskRequested) { _, requested in
+            if requested {
+                selectionStore.addTaskRequested = false
+                addTodo()
+            }
+        }
     }
 
     // MARK: - Header
@@ -236,7 +242,6 @@ struct ProjectDetailView: View {
         modelContext.insert(todo)
         selectionStore.selectedTodo = todo
         expandInspector(for: todo)
-        isListFocused = true
     }
 
     private func deleteTodo(_ todo: Todo) {

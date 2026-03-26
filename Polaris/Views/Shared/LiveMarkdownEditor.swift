@@ -46,8 +46,11 @@ struct LiveMarkdownEditor: NSViewRepresentable {
         textView.isSelectable = true
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.isRichText = false
+        textView.isRichText = true
         textView.usesFontPanel = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.textContainerInset = compactInsets ? NSSize(width: 0, height: 4) : NSSize(width: 16, height: 32)
@@ -126,18 +129,42 @@ struct LiveMarkdownEditor: NSViewRepresentable {
         let highlightBgColor = NSColor.systemYellow.withAlphaComponent(0.3)
         let linkColor = NSColor.linkColor
 
-        // Reset to body style
+        // Reset to body style — clear all custom attributes to prevent stale styling
         textStorage.beginEditing()
         textStorage.setAttributes([
             .font: bodyFont,
-            .foregroundColor: textColor
+            .foregroundColor: textColor,
+            .backgroundColor: NSColor.clear,
+            .strikethroughStyle: 0,
+            .underlineStyle: 0,
+            .baselineOffset: 0
         ], range: fullRange)
 
         let lines = content.components(separatedBy: "\n")
         var lineStart = 0
         var inCodeBlock = false
+        // Track which lines are setext underlines so we can style the heading line above
+        var setextHeadingLines: Set<Int> = []
 
-        for line in lines {
+        // Pre-scan for setext headings (line followed by === or ---)
+        do {
+            var scanCodeBlock = false
+            for i in 0..<lines.count {
+                if lines[i].hasPrefix("```") { scanCodeBlock.toggle() }
+                guard i > 0 && !scanCodeBlock else { continue }
+                let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                let prevTrimmed = lines[i - 1].trimmingCharacters(in: .whitespaces)
+                if !prevTrimmed.isEmpty {
+                    if trimmed.count >= 1 && trimmed.allSatisfy({ $0 == "=" }) {
+                        setextHeadingLines.insert(i)
+                    } else if trimmed.count >= 2 && trimmed.allSatisfy({ $0 == "-" }) {
+                        setextHeadingLines.insert(i)
+                    }
+                }
+            }
+        }
+
+        for (lineIndex, line) in lines.enumerated() {
             let lineLength = (line as NSString).length
             let lineRange = NSRange(location: lineStart, length: lineLength)
 
@@ -163,6 +190,22 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 continue
             }
 
+            // Setext heading underlines (=== or ---)
+            if setextHeadingLines.contains(lineIndex) {
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: lineRange)
+                lineStart += lineLength + 1
+                continue
+            }
+
+            // Setext heading text (line before === or ---)
+            if lineIndex + 1 < lines.count && setextHeadingLines.contains(lineIndex + 1) {
+                let nextTrimmed = lines[lineIndex + 1].trimmingCharacters(in: .whitespaces)
+                let headingFont = nextTrimmed.allSatisfy({ $0 == "=" }) ? h1Font : h2Font
+                textStorage.addAttribute(.font, value: headingFont, range: lineRange)
+                lineStart += lineLength + 1
+                continue
+            }
+
             // Horizontal rules: ---, ***, ___  (with optional spaces)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.count >= 3 {
@@ -175,6 +218,13 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                     lineStart += lineLength + 1
                     continue
                 }
+            }
+
+            // Definition lists: lines starting with ": "
+            if trimmed.hasPrefix(": ") {
+                let indent = line.count - trimmed.count
+                let markerRange = NSRange(location: lineStart + indent, length: 2)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
 
             // Headers
@@ -204,34 +254,66 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
 
-            // Blockquotes
-            if line.hasPrefix("> ") || line == ">" {
-                let markerLen = line.hasPrefix("> ") ? 2 : 1
+            // Blockquotes (including nested: >, >>, >>> etc.)
+            if let bqMatch = line.range(of: #"^(>\s*)+"#, options: .regularExpression) {
+                let markerLen = line.distance(from: line.startIndex, to: bqMatch.upperBound)
                 let markerRange = NSRange(location: lineStart, length: markerLen)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
-                // Style the content in blockquote color
                 if lineLength > markerLen {
                     let contentRange = NSRange(location: lineStart + markerLen, length: lineLength - markerLen)
                     textStorage.addAttribute(.foregroundColor, value: blockquoteColor, range: contentRange)
                 }
             }
 
-            // Task lists: - [ ] and - [x] / - [X]
-            if line.hasPrefix("- [ ] ") || line.hasPrefix("- [x] ") || line.hasPrefix("- [X] ") {
-                let markerRange = NSRange(location: lineStart, length: 6)
+            // Task lists: - [ ] and - [x] / - [X] (with optional indent)
+            if let taskMatch = trimmed.range(of: #"^[-*+] \[([ xX])\] "#, options: .regularExpression) {
+                let indent = line.count - trimmed.count
+                let markerLength = trimmed.distance(from: trimmed.startIndex, to: taskMatch.upperBound)
+                let markerRange = NSRange(location: lineStart + indent, length: markerLength)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
-            // Bullet points
-            else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
-                let markerRange = NSRange(location: lineStart, length: 2)
+            // Bullet points (with optional indent)
+            else if let bulletMatch = trimmed.range(of: #"^[-*+] "#, options: .regularExpression) {
+                let indent = line.count - trimmed.count
+                let markerLength = trimmed.distance(from: trimmed.startIndex, to: bulletMatch.upperBound)
+                let markerRange = NSRange(location: lineStart + indent, length: markerLength)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
             }
 
-            // Numbered lists (e.g. "1. ", "12. ")
-            if let match = line.range(of: #"^\d+\.\s"#, options: .regularExpression) {
-                let markerLength = line.distance(from: line.startIndex, to: match.upperBound)
+            // Numbered lists (e.g. "1. ", "12. ") with optional indent
+            if let match = trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) {
+                let indent = line.count - trimmed.count
+                let markerLength = trimmed.distance(from: trimmed.startIndex, to: match.upperBound)
+                let markerRange = NSRange(location: lineStart + indent, length: markerLength)
+                textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+            }
+
+            // Tables: lines starting with | or separator lines like |---|---|
+            if trimmed.hasPrefix("|") {
+                // Table separator line (e.g. |---|---|)
+                let isSeparator = trimmed.allSatisfy({ $0 == "|" || $0 == "-" || $0 == ":" || $0 == " " })
+                if isSeparator {
+                    textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: lineRange)
+                    textStorage.addAttribute(.font, value: codeFont, range: lineRange)
+                } else {
+                    // Style pipe characters as syntax
+                    let nsLine = line as NSString
+                    let pipeChar: unichar = 0x7C // "|"
+                    for i in 0..<nsLine.length {
+                        if nsLine.character(at: i) == pipeChar {
+                            let pipeRange = NSRange(location: lineStart + i, length: 1)
+                            textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: pipeRange)
+                        }
+                    }
+                }
+            }
+
+            // Footnote definitions: [^1]: text
+            if let fnMatch = line.range(of: #"^\[\^[^\]]+\]:"#, options: .regularExpression) {
+                let markerLength = line.distance(from: line.startIndex, to: fnMatch.upperBound)
                 let markerRange = NSRange(location: lineStart, length: markerLength)
                 textStorage.addAttribute(.foregroundColor, value: syntaxColor, range: markerRange)
+                textStorage.addAttribute(.font, value: boldFont, range: markerRange)
             }
 
             // Inline formatting within this line
@@ -339,6 +421,42 @@ struct LiveMarkdownEditor: NSViewRepresentable {
                 text: nsLine,
                 lineOffset: lineStart,
                 markerColor: syntaxColor,
+                linkColor: linkColor
+            )
+
+            // Footnote references [^1]
+            applyInlinePattern(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                pattern: "\\[\\^([^\\]]+)\\](?!:)",
+                contentFont: bodyFont,
+                markerColor: linkColor
+            )
+
+            // Subscript ~text~ (single tilde, not double ~~)
+            applyInlineSubscript(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                baseFontSize: scaled,
+                markerColor: syntaxColor
+            )
+
+            // Superscript ^text^
+            applyInlineSuperscript(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
+                baseFontSize: scaled,
+                markerColor: syntaxColor
+            )
+
+            // Auto-linked URLs (bare https:// or http://)
+            applyAutoLinks(
+                in: textStorage,
+                text: nsLine,
+                lineOffset: lineStart,
                 linkColor: linkColor
             )
 
@@ -499,6 +617,75 @@ struct LiveMarkdownEditor: NSViewRepresentable {
         }
     }
 
+    private static func applyInlineSubscript(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        baseFontSize: CGFloat,
+        markerColor: NSColor
+    ) {
+        // Single tilde ~text~ but not double ~~text~~
+        guard let regex = try? NSRegularExpression(pattern: "(?<!~)~(?!~)([^~]+)(?<!~)~(?!~)") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 1 else { return }
+            let contentRange = match.range(at: 1)
+            let adjustedContent = NSRange(location: lineOffset + contentRange.location, length: contentRange.length)
+            let smallFont = NSFont.systemFont(ofSize: baseFontSize - 2)
+            textStorage.addAttribute(.font, value: smallFont, range: adjustedContent)
+            textStorage.addAttribute(.baselineOffset, value: -2, range: adjustedContent)
+
+            let markerStart = NSRange(location: lineOffset + match.range.location, length: 1)
+            let markerEnd = NSRange(location: lineOffset + match.range.location + match.range.length - 1, length: 1)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerStart)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerEnd)
+        }
+    }
+
+    private static func applyInlineSuperscript(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        baseFontSize: CGFloat,
+        markerColor: NSColor
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: "\\^([^\\^]+)\\^") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match, match.numberOfRanges > 1 else { return }
+            let contentRange = match.range(at: 1)
+            let adjustedContent = NSRange(location: lineOffset + contentRange.location, length: contentRange.length)
+            let smallFont = NSFont.systemFont(ofSize: baseFontSize - 2)
+            textStorage.addAttribute(.font, value: smallFont, range: adjustedContent)
+            textStorage.addAttribute(.baselineOffset, value: 4, range: adjustedContent)
+
+            let markerStart = NSRange(location: lineOffset + match.range.location, length: 1)
+            let markerEnd = NSRange(location: lineOffset + match.range.location + match.range.length - 1, length: 1)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerStart)
+            textStorage.addAttribute(.foregroundColor, value: markerColor, range: markerEnd)
+        }
+    }
+
+    private static func applyAutoLinks(
+        in textStorage: NSTextStorage,
+        text: NSString,
+        lineOffset: Int,
+        linkColor: NSColor
+    ) {
+        // Match bare URLs not already inside []() syntax
+        guard let regex = try? NSRegularExpression(pattern: "(?<!\\()\\bhttps?://[^\\s)>]+") else { return }
+        let lineRange = NSRange(location: 0, length: text.length)
+
+        regex.enumerateMatches(in: text as String, range: lineRange) { match, _, _ in
+            guard let match else { return }
+            let fullRange = NSRange(location: lineOffset + match.range.location, length: match.range.length)
+            textStorage.addAttribute(.foregroundColor, value: linkColor, range: fullRange)
+            textStorage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: fullRange)
+        }
+    }
+
     private func applyMarkdownStyling(to textView: NSTextView) {
         Self.applyMarkdownStyling(to: textView, baseFontSize: baseFontSize)
     }
@@ -571,6 +758,11 @@ final class MarkdownTextView: NSTextView {
             enclosingScrollView?.invalidateIntrinsicContentSize()
         }
         needsDisplay = true // redraw placeholder
+    }
+
+    // Paste as plain text to prevent rich formatting from entering the editor
+    override func paste(_ sender: Any?) {
+        pasteAsPlainText(sender)
     }
 
     override func becomeFirstResponder() -> Bool {
