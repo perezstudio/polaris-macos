@@ -420,6 +420,18 @@ struct InspectorView: View {
                                 syncChecklistOrder(for: todo)
                                 focusedChecklistItemId = prevId
                             }
+                        },
+                        onMovePrevious: {
+                            if let idx = orderedChecklistItems.firstIndex(where: { $0.persistentModelID == item.persistentModelID }),
+                               idx > 0 {
+                                focusedChecklistItemId = orderedChecklistItems[idx - 1].persistentModelID
+                            }
+                        },
+                        onMoveNext: {
+                            if let idx = orderedChecklistItems.firstIndex(where: { $0.persistentModelID == item.persistentModelID }),
+                               idx < orderedChecklistItems.count - 1 {
+                                focusedChecklistItemId = orderedChecklistItems[idx + 1].persistentModelID
+                            }
                         }
                     )
                     .opacity(isBeingDragged ? 0.35 : 1.0)
@@ -479,6 +491,8 @@ private struct ChecklistItemRow: View {
     var onRequestFocus: (() -> Void)?
     var onEnter: (() -> Void)?
     var onDeleteEmpty: (() -> Void)?
+    var onMovePrevious: (() -> Void)?
+    var onMoveNext: (() -> Void)?
 
     @State private var isHovered = false
 
@@ -507,7 +521,9 @@ private struct ChecklistItemRow: View {
                 isCompleted: item.isCompleted,
                 onEnter: { onEnter?() },
                 onDeleteEmpty: { onDeleteEmpty?() },
-                onFocus: { onRequestFocus?() }
+                onFocus: { onRequestFocus?() },
+                onMovePrevious: { onMovePrevious?() },
+                onMoveNext: { onMoveNext?() }
             )
         }
         .padding(.vertical, 4)
@@ -526,6 +542,8 @@ private struct ChecklistTextField: NSViewRepresentable {
     var onEnter: (() -> Void)?
     var onDeleteEmpty: (() -> Void)?
     var onFocus: (() -> Void)?
+    var onMovePrevious: (() -> Void)?
+    var onMoveNext: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -601,6 +619,32 @@ private struct ChecklistTextField: NSViewRepresentable {
             if commandSelector == #selector(NSResponder.deleteBackward(_:)) {
                 if textView.string.isEmpty {
                     parent.onDeleteEmpty?()
+                    return true
+                }
+            }
+            // Up arrow → previous item
+            if commandSelector == #selector(NSResponder.moveUp(_:)) {
+                parent.onMovePrevious?()
+                return true
+            }
+            // Down arrow → next item
+            if commandSelector == #selector(NSResponder.moveDown(_:)) {
+                parent.onMoveNext?()
+                return true
+            }
+            // Left arrow at start of text → previous item
+            if commandSelector == #selector(NSResponder.moveLeft(_:)) {
+                let cursorPos = textView.selectedRange().location
+                if cursorPos == 0 && textView.selectedRange().length == 0 {
+                    parent.onMovePrevious?()
+                    return true
+                }
+            }
+            // Right arrow at end of text → next item
+            if commandSelector == #selector(NSResponder.moveRight(_:)) {
+                let cursorPos = textView.selectedRange().location
+                if cursorPos == textView.string.count && textView.selectedRange().length == 0 {
+                    parent.onMoveNext?()
                     return true
                 }
             }
