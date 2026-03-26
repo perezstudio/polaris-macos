@@ -12,6 +12,7 @@ struct TaskRowView: View {
     var startInEditMode: Bool = false
     var onSelect: (() -> Void)?
     var onEditModeStarted: (() -> Void)?
+    var onEditingChanged: ((Bool) -> Void)?
 
     @State private var isHovered = false
     @State private var isEditing = false
@@ -141,16 +142,19 @@ struct TaskRowView: View {
         editingTitle = todo.title
         isEditing = true
         titleFieldFocused = true
+        onEditingChanged?(true)
     }
 
     private func commitEdit() {
         guard isEditing else { return }
         todo.title = editingTitle
         isEditing = false
+        onEditingChanged?(false)
     }
 
     private func cancelEdit() {
         isEditing = false
+        onEditingChanged?(false)
     }
 
     private var priorityBadge: some View {

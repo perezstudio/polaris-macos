@@ -19,6 +19,7 @@ struct ProjectDetailView: View {
     @State private var draggedTodoModelID: PersistentIdentifier?
     @State private var orderedTodos: [Todo] = []
     @State private var newlyCreatedTodoID: PersistentIdentifier?
+    @State private var isEditingTaskTitle = false
 
     private var sortedTodos: [Todo] {
         project.todos.sorted { a, b in
@@ -54,12 +55,14 @@ struct ProjectDetailView: View {
             return .handled
         }
         .onKeyPress(.return) {
+            guard !isEditingTaskTitle else { return .ignored }
             if let todo = selectionStore.selectedTodo {
                 expandInspector(for: todo)
             }
             return .handled
         }
         .onKeyPress(.escape) {
+            guard !isEditingTaskTitle else { return .ignored }
             deselectTask()
             return .handled
         }
@@ -184,6 +187,9 @@ struct ProjectDetailView: View {
             },
             onEditModeStarted: {
                 newlyCreatedTodoID = nil
+            },
+            onEditingChanged: { editing in
+                isEditingTaskTitle = editing
             }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
