@@ -12,141 +12,217 @@ struct TagsSettingsView: View {
     @Query(sort: \Tag.name) private var tags: [Tag]
     @Environment(\.modelContext) private var modelContext
 
-    @State private var selectedTagID: PersistentIdentifier?
-    @State private var editingName: String = ""
-    @State private var editingColor: String = "blue"
-    @State private var isAddingNew = false
+    @State private var tagToEdit: Tag?
+    @State private var tagPendingDeletion: Tag?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Tag list
-            List(selection: $selectedTagID) {
-                ForEach(tags) { tag in
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.fromString(tag.color))
-                            .frame(width: 10, height: 10)
-
-                        Text(tag.name)
-                            .lineLimit(1)
-
-                        Spacer()
-
-                        Text("\(tag.todos.count) tasks")
-                            .font(.caption)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if tags.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.quaternary)
+                        Text("No Tags")
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.secondary)
+                        Text("Create a tag to get started.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
                     }
-                    .tag(tag.persistentModelID)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(tags.enumerated()), id: \.element.persistentModelID) { index, tag in
+                            TagRow(
+                                tag: tag,
+                                onEdit: { tagToEdit = tag },
+                                onDelete: { tagPendingDeletion = tag }
+                            )
+
+                            if index < tags.count - 1 {
+                                Divider()
+                                    .padding(.horizontal, 14)
+                            }
+                        }
+                    }
+                    .formGroupBackground()
                 }
-            }
-            .listStyle(.inset(alternatesRowBackgrounds: true))
 
-            Divider()
-
-            // Bottom bar
-            HStack(spacing: 0) {
                 Button {
                     addTag()
                 } label: {
-                    Image(systemName: "plus")
-                        .frame(width: 24, height: 24)
+                    Text("Add Tag")
                 }
-                .buttonStyle(.borderless)
-
-                Button {
-                    deleteSelectedTag()
-                } label: {
-                    Image(systemName: "minus")
-                        .frame(width: 24, height: 24)
+                .controlSize(.regular)
+            }
+            .frame(maxWidth: 500)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(item: $tagToEdit) { tag in
+            TagEditSheet(tag: tag)
+        }
+        .confirmationDialog(
+            "Delete \"\(tagPendingDeletion?.name ?? "Tag")\"?",
+            isPresented: Binding(
+                get: { tagPendingDeletion != nil },
+                set: { if !$0 { tagPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let tag = tagPendingDeletion {
+                    tagPendingDeletion = nil
+                    modelContext.delete(tag)
+                    try? modelContext.save()
                 }
-                .buttonStyle(.borderless)
-                .disabled(selectedTagID == nil)
-
-                Spacer()
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-        }
-        .safeAreaInset(edge: .trailing) {
-            if let selectedTag = tags.first(where: { $0.persistentModelID == selectedTagID }) {
-                tagEditor(for: selectedTag)
-                    .frame(width: 220)
+            Button("Cancel", role: .cancel) {
+                tagPendingDeletion = nil
             }
-        }
-        .onChange(of: selectedTagID) { _, newValue in
-            if let tag = tags.first(where: { $0.persistentModelID == newValue }) {
-                editingName = tag.name
-                editingColor = tag.color
-            }
+        } message: {
+            Text("This tag will be removed from all tasks. This action cannot be undone.")
         }
     }
-
-    // MARK: - Tag Editor
-
-    private func tagEditor(for tag: Tag) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Name")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("Tag name", text: $editingName)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        tag.name = editingName
-                    }
-                    .onChange(of: editingName) { _, newValue in
-                        tag.name = newValue
-                    }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Color")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(24), spacing: 6), count: 6), spacing: 6) {
-                    ForEach(ProjectColor.allCases, id: \.self) { pc in
-                        Circle()
-                            .fill(pc.color)
-                            .frame(width: 22, height: 22)
-                            .overlay {
-                                if tag.color == pc.rawValue {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .onTapGesture {
-                                tag.color = pc.rawValue
-                                editingColor = pc.rawValue
-                            }
-                    }
-                }
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    // MARK: - Actions
 
     private func addTag() {
         let tag = Tag(name: "New Tag", color: ProjectColor.random.rawValue)
         modelContext.insert(tag)
         try? modelContext.save()
-        selectedTagID = tag.persistentModelID
-        editingName = tag.name
-        editingColor = tag.color
+        tagToEdit = tag
     }
+}
 
-    private func deleteSelectedTag() {
-        guard let id = selectedTagID,
-              let tag = tags.first(where: { $0.persistentModelID == id }) else { return }
-        selectedTagID = nil
-        modelContext.delete(tag)
-        try? modelContext.save()
+// MARK: - Tag Row
+
+private struct TagRow: View {
+    let tag: Tag
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.fromString(tag.color))
+                        .frame(width: 10, height: 10)
+
+                    Text(tag.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                }
+
+                Text("\(tag.todos.count) task\(tag.todos.count == 1 ? "" : "s")")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 18)
+            }
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                Button("Edit", action: onEdit)
+                    .controlSize(.small)
+
+                Button("Delete", role: .destructive, action: onDelete)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Tag Edit Sheet
+
+private struct TagEditSheet: View {
+    @Bindable var tag: Tag
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var editingName: String = ""
+    @State private var editingColor: String = ""
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Edit Tag")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 16) {
+                // Name
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Name")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 6)
+
+                    TextField("Tag name", text: $editingName)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .formGroupBackground()
+                }
+
+                // Color
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Color")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 6)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(24), spacing: 6), count: 6), spacing: 6) {
+                        ForEach(ProjectColor.allCases, id: \.self) { pc in
+                            Circle()
+                                .fill(pc.color)
+                                .frame(width: 22, height: 22)
+                                .overlay {
+                                    if editingColor == pc.rawValue {
+                                        Image(systemName: "checkmark")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .onTapGesture {
+                                    editingColor = pc.rawValue
+                                }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .formGroupBackground()
+                }
+            }
+
+            HStack {
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Save") {
+                    tag.name = editingName
+                    tag.color = editingColor
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(editingName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 320)
+        .onAppear {
+            editingName = tag.name
+            editingColor = tag.color
+        }
     }
 }

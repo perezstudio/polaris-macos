@@ -118,6 +118,7 @@ struct ProjectDetailView: View {
             }
         }
         .padding(.horizontal, 8)
+        .padding(.leading, windowState.isSidebarCollapsed ? 68 : 0)
         .frame(height: 52)
     }
 
@@ -144,7 +145,7 @@ struct ProjectDetailView: View {
         } else {
             GeometryReader { geometry in
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    VStack(spacing: 0) {
                         ForEach(orderedTodos) { todo in
                             taskRow(for: todo)
                         }
@@ -155,17 +156,25 @@ struct ProjectDetailView: View {
                     .padding(.top, 68)
                     .padding(.bottom, 24)
                     .frame(minHeight: geometry.size.height, alignment: .top)
-                    .contentShape(Rectangle())
-                    .onTapGesture { deselectTask() }
+                    .background {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { deselectTask() }
+                    }
+                    .onDrop(of: [.text], delegate: ListBackgroundDropDelegate(
+                        orderedTodos: $orderedTodos,
+                        draggedTodoModelID: $draggedTodoModelID,
+                        modelContext: modelContext
+                    ))
                 }
-                .onDrop(of: [.text], delegate: TodoListDropDelegate(
-                    orderedTodos: $orderedTodos,
-                    draggedTodoModelID: $draggedTodoModelID,
-                    modelContext: modelContext
-                ))
             }
             .onAppear { orderedTodos = sortedTodos }
             .onChange(of: project.todos) { orderedTodos = sortedTodos }
+            .onChange(of: sortedTodos.map(\.persistentModelID)) {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    orderedTodos = sortedTodos
+                }
+            }
         }
     }
 
@@ -264,7 +273,7 @@ struct ProjectDetailView: View {
     }
 }
 
-// MARK: - Drop Delegate
+// MARK: - Drop Delegates
 
 private struct TodoDropDelegate: DropDelegate {
     let targetTodoModelID: PersistentIdentifier
@@ -295,15 +304,9 @@ private struct TodoDropDelegate: DropDelegate {
         draggedTodoModelID = nil
         return true
     }
-
-    func dropExited(info: DropInfo) {
-        // No-op — items are already in the right position
-    }
 }
 
-// MARK: - List-level Drop Delegate (catches drops on whitespace)
-
-private struct TodoListDropDelegate: DropDelegate {
+private struct ListBackgroundDropDelegate: DropDelegate {
     @Binding var orderedTodos: [Todo]
     @Binding var draggedTodoModelID: PersistentIdentifier?
     let modelContext: ModelContext
@@ -313,7 +316,6 @@ private struct TodoListDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard draggedTodoModelID != nil else { return false }
         for (i, todo) in orderedTodos.enumerated() {
             todo.sortOrder = i
         }
@@ -322,3 +324,4 @@ private struct TodoListDropDelegate: DropDelegate {
         return true
     }
 }
+

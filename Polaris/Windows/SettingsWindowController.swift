@@ -45,7 +45,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.modelContainer = modelContainer
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 550, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 650, height: 455),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -88,17 +88,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.toolbar?.selectedItemIdentifier = NSToolbarItem.Identifier(tab.rawValue)
         window?.title = tab.label
 
-        let view: AnyView
+        let vc: NSViewController
         switch tab {
         case .tags:
-            view = AnyView(
-                TagsSettingsView()
+            vc = SettingsTabViewController(
+                rootView: TagsSettingsView()
                     .modelContainer(modelContainer)
             )
         }
 
-        let hostingVC = NSHostingController(rootView: view)
-        window?.contentViewController = hostingVC
+        window?.contentViewController = vc
     }
 
     // MARK: - NSWindowDelegate
@@ -138,5 +137,39 @@ extension SettingsWindowController: NSToolbarDelegate {
     @objc private func toolbarTabClicked(_ sender: NSToolbarItem) {
         guard let tab = Tab(rawValue: sender.itemIdentifier.rawValue) else { return }
         selectTab(tab)
+    }
+}
+
+// MARK: - Settings Tab View Controller
+
+private final class SettingsTabViewController<Content: View>: NSViewController {
+    private let rootView: Content
+
+    init(rootView: Content) {
+        self.rootView = rootView
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 650, height: 455))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hostingView)
+
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
     }
 }

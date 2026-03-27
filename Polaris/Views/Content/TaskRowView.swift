@@ -17,6 +17,7 @@ struct TaskRowView: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editingTitle = ""
+    @State private var lastTitleTapTime: Date?
     @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
@@ -61,7 +62,6 @@ struct TaskRowView: View {
                     .foregroundStyle(todo.isCompleted ? .secondary : .primary)
                     .strikethrough(todo.isCompleted)
                     .lineLimit(1)
-                    .onTapGesture(count: 2) { startEditing() }
             }
 
             // Notes / checklist indicators
@@ -128,7 +128,16 @@ struct TaskRowView: View {
                 )
         )
         .contentShape(Rectangle())
-        .onTapGesture { onSelect?() }
+        .onTapGesture {
+            let now = Date()
+            if let last = lastTitleTapTime, now.timeIntervalSince(last) < 0.3 {
+                lastTitleTapTime = nil
+                startEditing()
+            } else {
+                lastTitleTapTime = now
+                onSelect?()
+            }
+        }
         .onHover { isHovered = $0 }
         .onAppear {
             if startInEditMode {

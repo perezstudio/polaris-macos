@@ -147,6 +147,18 @@ extension Color {
     static let polarisWindowBackground = Color(nsColor: .windowBackgroundColor)
 }
 
+// MARK: - Form Group Background
+
+extension View {
+    func formGroupBackground() -> some View {
+        self
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(0.06))
+            }
+    }
+}
+
 // MARK: - Flow Layout
 
 struct FlowLayout: Layout {
