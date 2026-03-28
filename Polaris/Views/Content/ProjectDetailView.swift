@@ -40,7 +40,7 @@ struct ProjectDetailView: View {
             .zIndex(1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white.ignoresSafeArea())
+        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
         .focusable()
         .focused($isListFocused)
