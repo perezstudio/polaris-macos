@@ -449,6 +449,11 @@ struct InspectorView: View {
                                 focusedChecklistItemId = prevId
                             }
                         },
+                        onBlur: {
+                            if focusedChecklistItemId == item.persistentModelID {
+                                focusedChecklistItemId = nil
+                            }
+                        },
                         onMovePrevious: {
                             if let idx = orderedChecklistItems.firstIndex(where: { $0.persistentModelID == item.persistentModelID }),
                                idx > 0 {
@@ -519,6 +524,7 @@ private struct ChecklistItemRow: View {
     var onRequestFocus: (() -> Void)?
     var onEnter: (() -> Void)?
     var onDeleteEmpty: (() -> Void)?
+    var onBlur: (() -> Void)?
     var onMovePrevious: (() -> Void)?
     var onMoveNext: (() -> Void)?
 
@@ -550,6 +556,7 @@ private struct ChecklistItemRow: View {
                 onEnter: { onEnter?() },
                 onDeleteEmpty: { onDeleteEmpty?() },
                 onFocus: { onRequestFocus?() },
+                onBlur: { onBlur?() },
                 onMovePrevious: { onMovePrevious?() },
                 onMoveNext: { onMoveNext?() }
             )
@@ -570,6 +577,7 @@ private struct ChecklistTextField: NSViewRepresentable {
     var onEnter: (() -> Void)?
     var onDeleteEmpty: (() -> Void)?
     var onFocus: (() -> Void)?
+    var onBlur: (() -> Void)?
     var onMovePrevious: (() -> Void)?
     var onMoveNext: (() -> Void)?
 
@@ -598,13 +606,16 @@ private struct ChecklistTextField: NSViewRepresentable {
         }
         updateStrikethrough(textField)
 
-        if isFocused && textField.window?.firstResponder !== textField.currentEditor() {
+        if isFocused && !context.coordinator.lastAppliedFocus {
+            context.coordinator.lastAppliedFocus = true
             DispatchQueue.main.async {
                 textField.window?.makeFirstResponder(textField)
                 if cursorAtEnd, let editor = textField.currentEditor() {
                     editor.selectedRange = NSRange(location: textField.stringValue.count, length: 0)
                 }
             }
+        } else if !isFocused {
+            context.coordinator.lastAppliedFocus = false
         }
     }
 
@@ -623,9 +634,15 @@ private struct ChecklistTextField: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         let parent: ChecklistTextField
         var isEditing = false
+        var lastAppliedFocus = false
 
         init(_ parent: ChecklistTextField) {
             self.parent = parent
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            lastAppliedFocus = false
+            parent.onBlur?()
         }
 
         func controlTextDidBeginEditing(_ obj: Notification) {
