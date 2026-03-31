@@ -31,10 +31,12 @@ enum HoverButtonSize {
 
 struct HoverButtonStyle: ButtonStyle {
     let size: HoverButtonSize
+    var iconColor: Color?
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(iconColor ?? .primary)
             .frame(width: size.dimension, height: size.dimension)
             .background(
                 RoundedRectangle(cornerRadius: 5)
@@ -52,8 +54,8 @@ struct HoverButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == HoverButtonStyle {
-    static func polarisHover(size: HoverButtonSize = .regular) -> HoverButtonStyle {
-        HoverButtonStyle(size: size)
+    static func polarisHover(size: HoverButtonSize = .regular, iconColor: Color? = nil) -> HoverButtonStyle {
+        HoverButtonStyle(size: size, iconColor: iconColor)
     }
 }
 
@@ -61,6 +63,7 @@ extension ButtonStyle where Self == HoverButtonStyle {
 
 struct HoverMenuStyle: MenuStyle {
     let size: HoverButtonSize
+    var iconColor: Color?
     @State private var isHovered = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -68,6 +71,7 @@ struct HoverMenuStyle: MenuStyle {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+            .foregroundStyle(iconColor ?? .primary)
             .frame(width: size.dimension, height: size.dimension)
             .background(
                 RoundedRectangle(cornerRadius: 5)
@@ -82,8 +86,8 @@ struct HoverMenuStyle: MenuStyle {
 }
 
 extension MenuStyle where Self == HoverMenuStyle {
-    static func polarisHover(size: HoverButtonSize = .regular) -> HoverMenuStyle {
-        HoverMenuStyle(size: size)
+    static func polarisHover(size: HoverButtonSize = .regular, iconColor: Color? = nil) -> HoverMenuStyle {
+        HoverMenuStyle(size: size, iconColor: iconColor)
     }
 }
 

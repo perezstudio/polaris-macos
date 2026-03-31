@@ -27,15 +27,7 @@ struct SectionHeaderView: View {
         Color.fromString(section.color)
     }
 
-    private var taskCount: Int {
-        section.todos.count
-    }
-
-    private var incompleteCount: Int {
-        section.todos.filter { !$0.isCompleted }.count
-    }
-
-    @ViewBuilder
+@ViewBuilder
     private var sectionMenu: some View {
         Button("Add Task") { onAddTask?() }
         Divider()
@@ -68,19 +60,16 @@ struct SectionHeaderView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Collapse chevron
+            // Collapse toggle
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     section.isCollapsed.toggle()
                 }
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(.appScaled(size: 10, weight: .semibold))
-                    .foregroundStyle(sectionColor)
-                    .rotationEffect(.degrees(section.isCollapsed ? 0 : 90))
+                Image(systemName: section.isCollapsed ? "diamond.fill" : "diamond")
+                    .font(.appScaled(size: 11))
             }
-            .buttonStyle(.plain)
-            .frame(width: 16)
+            .buttonStyle(.polarisHover(size: .small, iconColor: sectionColor))
 
             // Section name (editable)
             if isEditing {
@@ -106,13 +95,6 @@ struct SectionHeaderView: View {
 
             Spacer()
 
-            // Task count
-            if taskCount > 0 {
-                Text("\(incompleteCount)/\(taskCount)")
-                    .font(.appScaled(size: 10, weight: .medium))
-                    .foregroundStyle(sectionColor.opacity(0.7))
-            }
-
             // Ellipsis menu — always reserves space, only visible on hover
             Menu {
                 sectionMenu
@@ -120,6 +102,7 @@ struct SectionHeaderView: View {
                 Image(systemName: "ellipsis")
                     .font(.appScaled(size: 11))
             }
+            .tint(sectionColor)
             .menuStyle(.polarisHover(size: .small))
             .opacity(isHovered ? 1 : 0)
         }

@@ -325,6 +325,7 @@ struct ProjectDetailView: View {
             .opacity(isSectionDragged ? 0.35 : 1.0)
             .scaleEffect(isSectionDragged ? 0.95 : 1.0)
             .onDrag {
+                isDragging = true
                 let _ = withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     collapsedForDrag.insert(section.persistentModelID)
                 }
@@ -985,7 +986,8 @@ private struct DragAutoScrollOverlay: NSViewRepresentable {
     }
 
     private func cleanupStaleDrag() {
-        DispatchQueue.main.async {
+        // Delay to let performDrop execute first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             if draggedSectionId != nil || draggedTodoModelID != nil {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     collapsedForDrag.removeAll()
