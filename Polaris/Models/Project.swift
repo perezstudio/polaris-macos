@@ -22,6 +22,9 @@ final class Project {
     @Relationship(deleteRule: .cascade, inverse: \Tag.project)
     var tags: [Tag] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \Section.project)
+    var sections: [Section] = []
+
     init(name: String, note: String = "", icon: String = "folder.fill", color: String? = nil, sortOrder: Int = 0) {
         self.id = UUID()
         self.name = name

@@ -13,4 +13,5 @@ final class SelectionStore {
     var selectedProject: Project?
     var selectedTodo: Todo?
     var addTaskRequested = false
+    var addSectionRequested = false
 }

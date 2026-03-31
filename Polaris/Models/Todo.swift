@@ -46,6 +46,7 @@ final class Todo {
     var sortOrder: Int
 
     var project: Project?
+    var section: Section?
 
     @Relationship(deleteRule: .cascade, inverse: \ChecklistItem.todo)
     var checklistItems: [ChecklistItem] = []

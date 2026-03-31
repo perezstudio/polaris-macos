@@ -79,6 +79,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New Task", action: #selector(MainSplitViewController.newTask(_:)), keyEquivalent: "n")
+
+        let newSectionItem = NSMenuItem(title: "New Section", action: #selector(MainSplitViewController.newSection(_:)), keyEquivalent: "h")
+        newSectionItem.keyEquivalentModifierMask = .command
+        fileMenu.addItem(newSectionItem)
+
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 

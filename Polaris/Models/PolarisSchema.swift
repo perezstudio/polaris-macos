@@ -6,14 +6,15 @@
 import SwiftData
 
 enum PolarisSchema: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
+    static var versionIdentifier = Schema.Version(2, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
             Project.self,
             Todo.self,
             Tag.self,
-            ChecklistItem.self
+            ChecklistItem.self,
+            Section.self
         ]
     }
 }

@@ -161,4 +161,9 @@ final class MainSplitViewController: NSSplitViewController {
         guard selectionStore.selectedProject != nil else { return }
         selectionStore.addTaskRequested = true
     }
+
+    @IBAction func newSection(_ sender: Any?) {
+        guard selectionStore.selectedProject != nil else { return }
+        selectionStore.addSectionRequested = true
+    }
 }

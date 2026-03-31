@@ -166,6 +166,34 @@ struct InspectorView: View {
                     .controlSize(.small)
                 }
 
+                fieldRow(icon: "rectangle.split.3x1", label: "Section") {
+                    Picker("", selection: Binding(
+                        get: { todo.section?.persistentModelID },
+                        set: { newId in
+                            if let newId, let section = todo.project?.sections.first(where: { $0.persistentModelID == newId }) {
+                                todo.section = section
+                            } else {
+                                todo.section = nil
+                            }
+                        }
+                    )) {
+                        Text("None").tag(nil as PersistentIdentifier?)
+                        if let project = todo.project {
+                            ForEach(project.sections.sorted(by: { $0.sortOrder < $1.sortOrder })) { section in
+                                HStack {
+                                    Circle()
+                                        .fill(Color.fromString(section.color))
+                                        .frame(width: 8, height: 8)
+                                    Text(section.name)
+                                }
+                                .tag(section.persistentModelID as PersistentIdentifier?)
+                            }
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                }
+
                 fieldRow(icon: "flag.fill", label: "Priority") {
                     Picker("", selection: Binding(
                         get: { todo.priority },
