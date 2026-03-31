@@ -27,6 +27,7 @@ struct ProjectDetailView: View {
     @State private var newlyCreatedSectionID: PersistentIdentifier?
     @State private var isEditingInline = false
     @State private var isDragging = false
+    @State private var scrollProxy: ScrollViewProxy?
     @State private var movingSectionSheet: Section?
 
     // MARK: - Computed
@@ -175,6 +176,16 @@ struct ProjectDetailView: View {
         .padding(.horizontal, 8)
         .padding(.leading, windowState.isSidebarCollapsed ? 68 : 0)
         .frame(height: 52)
+        .onDrop(of: [.text], delegate: BackgroundDropDelegate(
+            orderedUnsectionedTodos: $orderedUnsectionedTodos,
+            sectionTodosMap: $sectionTodosMap,
+            draggedTodoModelID: $draggedTodoModelID,
+            draggedSectionId: $draggedSectionId,
+            orderedSections: $orderedSections,
+            collapsedForDrag: $collapsedForDrag,
+            isDragging: $isDragging,
+            modelContext: modelContext
+        ))
     }
 
     // MARK: - Task List
@@ -199,6 +210,7 @@ struct ProjectDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             GeometryReader { geometry in
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         // Unsectioned tasks
@@ -247,6 +259,18 @@ struct ProjectDetailView: View {
                         isDragging: $isDragging,
                         modelContext: modelContext
                     ))
+                }
+                .onAppear { scrollProxy = proxy }
+                }
+                .overlay {
+                    if isDragging {
+                        DragAutoScrollOverlay(
+                            isDragging: $isDragging,
+                            draggedTodoModelID: $draggedTodoModelID,
+                            draggedSectionId: $draggedSectionId,
+                            collapsedForDrag: $collapsedForDrag
+                        )
+                    }
                 }
             }
             .onAppear { syncAllState() }
@@ -394,6 +418,7 @@ struct ProjectDetailView: View {
                 deleteTodo(todo)
             }
         }
+        .id(todo.persistentModelID)
     }
 
     // MARK: - Keyboard Navigation
@@ -405,14 +430,25 @@ struct ProjectDetailView: View {
         guard let current = selectionStore.selectedTodo,
               let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
             selectionStore.selectedTodo = todos.first
-            if let first = todos.first { expandInspector(for: first) }
+            if let first = todos.first {
+                expandInspector(for: first)
+                scrollToTodo(first)
+            }
             return
         }
 
         let newIndex = currentIndex + direction
         guard newIndex >= 0 && newIndex < todos.count else { return }
-        selectionStore.selectedTodo = todos[newIndex]
-        expandInspector(for: todos[newIndex])
+        let todo = todos[newIndex]
+        selectionStore.selectedTodo = todo
+        expandInspector(for: todo)
+        scrollToTodo(todo)
+    }
+
+    private func scrollToTodo(_ todo: Todo) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            scrollProxy?.scrollTo(todo.persistentModelID, anchor: .center)
+        }
     }
 
     private func expandInspector(for todo: Todo) {
@@ -920,5 +956,131 @@ private struct BackgroundDropDelegate: DropDelegate {
         }
 
         return false
+    }
+}
+
+// MARK: - Drag Auto-Scroll
+
+/// Invisible view that polls mouse position during drag and scrolls the parent NSScrollView.
+/// Does NOT register for drag types, so it never intercepts SwiftUI drop delegates.
+private struct DragAutoScrollOverlay: NSViewRepresentable {
+    @Binding var isDragging: Bool
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedSectionId: PersistentIdentifier?
+    @Binding var collapsedForDrag: Set<PersistentIdentifier>
+
+    func makeNSView(context: Context) -> DragAutoScrollNSView {
+        let view = DragAutoScrollNSView()
+        view.onDragEnded = { cleanupStaleDrag() }
+        return view
+    }
+
+    func updateNSView(_ nsView: DragAutoScrollNSView, context: Context) {
+        nsView.onDragEnded = { cleanupStaleDrag() }
+        nsView.startPolling()
+    }
+
+    static func dismantleNSView(_ nsView: DragAutoScrollNSView, coordinator: ()) {
+        nsView.stopPolling()
+    }
+
+    private func cleanupStaleDrag() {
+        DispatchQueue.main.async {
+            if draggedSectionId != nil || draggedTodoModelID != nil {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    collapsedForDrag.removeAll()
+                }
+                draggedSectionId = nil
+                draggedTodoModelID = nil
+                isDragging = false
+            }
+        }
+    }
+}
+
+private final class DragAutoScrollNSView: NSView {
+    private var pollTimer: Timer?
+    private let edgeZone: CGFloat = 50
+    private let maxSpeed: CGFloat = 12
+    var onDragEnded: (() -> Void)?
+    private var wasMouseDown = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil // Fully transparent to all events
+    }
+
+    func startPolling() {
+        guard pollTimer == nil else { return }
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.tick()
+        }
+    }
+
+    func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
+
+    override func removeFromSuperview() {
+        stopPolling()
+        super.removeFromSuperview()
+    }
+
+    private func findScrollView() -> NSScrollView? {
+        var current: NSView? = superview
+        while let view = current {
+            if let sv = view as? NSScrollView { return sv }
+            current = view.superview
+        }
+        return nil
+    }
+
+    private func tick() {
+        guard let window = window, let scrollView = findScrollView() else { return }
+
+        let mouseDown = NSEvent.pressedMouseButtons & 1 != 0
+        if wasMouseDown && !mouseDown {
+            // Mouse was released — drag ended, clean up any stale state
+            wasMouseDown = false
+            onDragEnded?()
+            return
+        }
+        wasMouseDown = mouseDown
+        guard mouseDown else { return }
+
+        let mouseInWindow = window.mouseLocationOutsideOfEventStream
+        let mouseInView = scrollView.convert(mouseInWindow, from: nil)
+        let visibleRect = scrollView.contentView.bounds
+
+        // Only scroll if mouse is within or near the scroll view horizontally
+        guard mouseInView.x >= -20 && mouseInView.x <= scrollView.bounds.width + 20 else { return }
+
+        let scrollBounds = scrollView.bounds
+        // AppKit: y=0 at bottom
+        let distFromVisualTop = scrollBounds.maxY - mouseInView.y
+        let distFromVisualBottom = mouseInView.y - scrollBounds.minY
+
+        var speed: CGFloat = 0
+        if distFromVisualTop < edgeZone && distFromVisualTop >= -10 {
+            let factor = 1.0 - max(0, distFromVisualTop) / edgeZone
+            speed = -maxSpeed * factor
+        } else if distFromVisualBottom < edgeZone && distFromVisualBottom >= -10 {
+            let factor = 1.0 - max(0, distFromVisualBottom) / edgeZone
+            speed = maxSpeed * factor
+        }
+
+        guard abs(speed) > 0.5 else { return }
+
+        let clipView = scrollView.contentView
+        var origin = visibleRect.origin
+        if scrollView.documentView?.isFlipped == true {
+            origin.y += speed
+        } else {
+            origin.y -= speed
+        }
+        let maxY = (scrollView.documentView?.frame.height ?? 0) - clipView.bounds.height
+        origin.y = max(0, min(origin.y, maxY))
+        clipView.setBoundsOrigin(origin)
+        scrollView.reflectScrolledClipView(clipView)
     }
 }
