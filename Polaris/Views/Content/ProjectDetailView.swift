@@ -29,6 +29,7 @@ struct ProjectDetailView: View {
     @State private var isDragging = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var movingSectionSheet: Section?
+    @State private var editingProject: Project?
 
     // MARK: - Computed
 
@@ -120,6 +121,9 @@ struct ProjectDetailView: View {
                 }
             )
         }
+        .sheet(item: $editingProject) { project in
+            ProjectEditSheet(project: project)
+        }
     }
 
     // MARK: - Header
@@ -162,6 +166,26 @@ struct ProjectDetailView: View {
                     .font(.appScaled(size: 14))
             }
             .buttonStyle(.polarisHover(size: .large))
+
+            Menu {
+                Button {
+                    editingProject = project
+                } label: {
+                    Label("Edit Project...", systemImage: "pencil")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    deleteProject()
+                } label: {
+                    Label("Remove Project", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.appScaled(size: 14))
+            }
+            .menuStyle(.polarisHover(size: .large))
 
             if windowState.isInspectorCollapsed {
                 Button {
@@ -593,6 +617,13 @@ struct ProjectDetailView: View {
         section.project = targetProject
         try? modelContext.save()
         syncAllState()
+    }
+
+    private func deleteProject() {
+        selectionStore.selectedTodo = nil
+        selectionStore.selectedProject = nil
+        modelContext.delete(project)
+        try? modelContext.save()
     }
 
     private func convertSectionToProject(_ section: Section) {
