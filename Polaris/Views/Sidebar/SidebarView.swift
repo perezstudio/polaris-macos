@@ -19,6 +19,7 @@ struct SidebarView: View {
     @State private var renamingProjectId: PersistentIdentifier?
     @State private var orderedProjects: [Project] = []
     @State private var draggedProjectId: UUID?
+    @State private var projectPendingDeletion: Project?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,6 +37,21 @@ struct SidebarView: View {
         .ignoresSafeArea(edges: .top)
         .sheet(item: $editingProject) { project in
             ProjectEditSheet(project: project)
+        }
+        .sheet(item: $projectPendingDeletion) { project in
+            DeleteConfirmationDialog(
+                icon: project.icon,
+                iconColor: Color.fromString(project.color),
+                title: "Delete \"\(project.name)\"?",
+                message: "This project and all its tasks will be permanently deleted. This action cannot be undone.",
+                onDelete: {
+                    projectPendingDeletion = nil
+                    deleteProject(project)
+                },
+                onCancel: {
+                    projectPendingDeletion = nil
+                }
+            )
         }
         .onAppear { orderedProjects = projects }
         .onChange(of: projects.map(\.id)) { _, _ in orderedProjects = projects }
@@ -91,7 +107,7 @@ struct SidebarView: View {
                         editingProject = project
                     },
                     onDelete: {
-                        deleteProject(project)
+                        projectPendingDeletion = project
                     },
                     onCommitRename: {
                         commitRename()

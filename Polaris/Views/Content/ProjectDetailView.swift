@@ -30,6 +30,7 @@ struct ProjectDetailView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var movingSectionSheet: Section?
     @State private var editingProject: Project?
+    @State private var showDeleteConfirmation = false
 
     // MARK: - Computed
 
@@ -124,6 +125,21 @@ struct ProjectDetailView: View {
         .sheet(item: $editingProject) { project in
             ProjectEditSheet(project: project)
         }
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DeleteConfirmationDialog(
+                icon: project.icon,
+                iconColor: Color.fromString(project.color),
+                title: "Delete \"\(project.name)\"?",
+                message: "This project and all its tasks will be permanently deleted. This action cannot be undone.",
+                onDelete: {
+                    showDeleteConfirmation = false
+                    deleteProject()
+                },
+                onCancel: {
+                    showDeleteConfirmation = false
+                }
+            )
+        }
     }
 
     // MARK: - Header
@@ -177,7 +193,7 @@ struct ProjectDetailView: View {
                 Divider()
 
                 Button(role: .destructive) {
-                    deleteProject()
+                    showDeleteConfirmation = true
                 } label: {
                     Label("Remove Project", systemImage: "trash")
                 }
