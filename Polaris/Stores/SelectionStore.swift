@@ -52,6 +52,7 @@ final class SelectionStore {
     var selectedProject: Project? {
         didSet {
             if selectedProject != nil {
+                Log.focus.info("[SelectionStore] selectedProject set → clearing tab & todo")
                 selectedTab = nil
                 selectedTodo = nil
             }
@@ -60,14 +61,23 @@ final class SelectionStore {
 
     var selectedTab: SidebarTab? {
         didSet {
-            if selectedTab != nil {
+            if let tab = selectedTab {
+                Log.focus.info("[SelectionStore] selectedTab set to \(tab.rawValue) → clearing project & todo")
                 selectedProject = nil
                 selectedTodo = nil
             }
         }
     }
 
-    var selectedTodo: Todo?
+    var selectedTodo: Todo? {
+        didSet {
+            if let todo = selectedTodo {
+                Log.focus.debug("[SelectionStore] selectedTodo set – ID: \(todo.persistentModelID.hashValue)")
+            } else if oldValue != nil {
+                Log.focus.debug("[SelectionStore] selectedTodo cleared (was ID: \(oldValue!.persistentModelID.hashValue))")
+            }
+        }
+    }
     var addTaskRequested = false
     var addSectionRequested = false
 }

@@ -95,32 +95,52 @@ struct TaskListContainer<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
-        .focusable(!isEditingInline)
+        .focusable()
         .focused($isListFocused)
         .focusEffectDisabled()
         .onPreferenceChange(InlineEditingKey.self) { editing in
+            Log.editing.debug("[TaskListContainer:\(title)] isEditingInline changed: \(editing)")
             isEditingInline = editing
+        }
+        .onChange(of: isListFocused) { _, focused in
+            Log.focus.debug("[TaskListContainer:\(title)] isListFocused changed: \(focused)")
         }
         .onAppear { isListFocused = true }
         .onKeyPress(.upArrow) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[TaskListContainer:\(title)] ↑ ignored (editing inline)")
+                return .ignored
+            }
+            Log.shortcut.debug("[TaskListContainer:\(title)] ↑ handled")
             navigateSelection(direction: -1)
             return .handled
         }
         .onKeyPress(.downArrow) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[TaskListContainer:\(title)] ↓ ignored (editing inline)")
+                return .ignored
+            }
+            Log.shortcut.debug("[TaskListContainer:\(title)] ↓ handled")
             navigateSelection(direction: 1)
             return .handled
         }
         .onKeyPress(.return) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[TaskListContainer:\(title)] ↩ ignored (editing inline)")
+                return .ignored
+            }
+            Log.shortcut.debug("[TaskListContainer:\(title)] ↩ handled")
             if let todo = selectionStore.selectedTodo {
                 expandInspector(for: todo)
             }
             return .handled
         }
         .onKeyPress(.escape) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[TaskListContainer:\(title)] ⎋ ignored (editing inline)")
+                return .ignored
+            }
+            Log.shortcut.debug("[TaskListContainer:\(title)] ⎋ handled → deselectTask")
             deselectTask()
             return .handled
         }

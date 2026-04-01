@@ -77,32 +77,45 @@ struct ProjectDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
-        .focusable(!isEditingInline)
+        .focusable()
         .focused($isListFocused)
         .focusEffectDisabled()
         .onPreferenceChange(InlineEditingKey.self) { editing in
+            Log.editing.debug("[ProjectDetailView] isEditingInline changed: \(editing)")
             isEditingInline = editing
         }
         .onAppear { isListFocused = true }
         .onKeyPress(.upArrow) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[ProjectDetailView] ↑ ignored (editing inline)")
+                return .ignored
+            }
             navigateSelection(direction: -1)
             return .handled
         }
         .onKeyPress(.downArrow) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[ProjectDetailView] ↓ ignored (editing inline)")
+                return .ignored
+            }
             navigateSelection(direction: 1)
             return .handled
         }
         .onKeyPress(.return) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[ProjectDetailView] ↩ ignored (editing inline)")
+                return .ignored
+            }
             if let todo = selectionStore.selectedTodo {
                 expandInspector(for: todo)
             }
             return .handled
         }
         .onKeyPress(.escape) {
-            guard !isEditingInline else { return .ignored }
+            guard !isEditingInline else {
+                Log.shortcut.debug("[ProjectDetailView] ⎋ ignored (editing inline)")
+                return .ignored
+            }
             deselectTask()
             return .handled
         }
@@ -560,6 +573,8 @@ struct ProjectDetailView: View {
             todo.project = project
             todo.section = section
             modelContext.insert(todo)
+            try? modelContext.save()
+            Log.data.info("[ProjectDetailView] addTodoContextAware – saved, ID: \(todo.persistentModelID.hashValue)")
             selectionStore.selectedTodo = todo
             newlyCreatedTodoID = todo.persistentModelID
             expandInspector(for: todo)
@@ -580,6 +595,8 @@ struct ProjectDetailView: View {
         todo.project = project
         todo.section = section
         modelContext.insert(todo)
+        try? modelContext.save()
+        Log.data.info("[ProjectDetailView] addTodo(toSection:) – saved, ID: \(todo.persistentModelID.hashValue)")
         selectionStore.selectedTodo = todo
         newlyCreatedTodoID = todo.persistentModelID
         expandInspector(for: todo)

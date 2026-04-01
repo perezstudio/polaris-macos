@@ -158,7 +158,11 @@ final class MainSplitViewController: NSSplitViewController {
     }
 
     @IBAction func newTask(_ sender: Any?) {
-        guard selectionStore.selectedProject != nil || selectionStore.selectedTab != nil else { return }
+        guard selectionStore.selectedProject != nil || selectionStore.selectedTab != nil else {
+            Log.shortcut.debug("[MainSplit] newTask ignored – no project or tab selected")
+            return
+        }
+        Log.shortcut.info("[MainSplit] newTask → addTaskRequested = true")
         selectionStore.addTaskRequested = true
     }
 

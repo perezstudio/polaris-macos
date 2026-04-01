@@ -67,12 +67,14 @@ struct InboxView: View {
             }
         }
         .onAppear { syncState() }
-        .onChange(of: inboxTodos.count) {
+        .onChange(of: inboxTodos.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[InboxView] inboxTodos.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: inboxTodos.map(\.persistentModelID)) {
             guard !isDragging else { return }
+            Log.data.debug("[InboxView] inboxTodos IDs changed → syncState (animated)")
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
             }
@@ -162,6 +164,8 @@ struct InboxView: View {
         let maxOrder = inboxTodos.map(\.sortOrder).max() ?? -1
         let todo = Todo(title: "", sortOrder: maxOrder + 1)
         modelContext.insert(todo)
+        try? modelContext.save()
+        Log.data.info("[InboxView] addTask – saved, ID: \(todo.persistentModelID.hashValue)")
         selectionStore.selectedTodo = todo
         newlyCreatedTodoID = todo.persistentModelID
         if windowState.isInspectorCollapsed {

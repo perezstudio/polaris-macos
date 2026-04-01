@@ -217,18 +217,21 @@ struct TodayView: View {
             }
         }
         .onAppear { syncState() }
-        .onChange(of: allTodos.count) {
+        .onChange(of: allTodos.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[TodayView] allTodos.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: allTodos.map(\.persistentModelID)) {
             guard !isDragging else { return }
+            Log.data.debug("[TodayView] allTodos IDs changed → syncState (animated)")
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
             }
         }
-        .onChange(of: projects.count) {
+        .onChange(of: projects.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[TodayView] projects.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: selectionStore.addTaskRequested) { _, requested in
@@ -363,6 +366,8 @@ struct TodayView: View {
         let todo = Todo(title: "", sortOrder: maxOrder + 1)
         todo.dueDate = today
         modelContext.insert(todo)
+        try? modelContext.save()
+        Log.data.info("[TodayView] addTask – saved, ID: \(todo.persistentModelID.hashValue)")
         selectionStore.selectedTodo = todo
         newlyCreatedTodoID = todo.persistentModelID
         if windowState.isInspectorCollapsed {

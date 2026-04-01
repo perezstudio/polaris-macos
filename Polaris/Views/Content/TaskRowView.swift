@@ -18,8 +18,9 @@ struct TaskRowView: View {
     @State private var isEditing = false
     @State private var editingTitle = ""
     @State private var lastTitleTapTime: Date?
-    @State private var isSettingUpFocus = false
     @FocusState private var titleFieldFocused: Bool
+
+    private var todoID: String { "\(todo.persistentModelID.hashValue)" }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -52,10 +53,22 @@ struct TaskRowView: View {
                     .textFieldStyle(.plain)
                     .font(.appScaled(size: 13))
                     .focused($titleFieldFocused)
-                    .onSubmit { commitEdit() }
-                    .onExitCommand { cancelEdit() }
+                    .onSubmit {
+                        Log.editing.debug("[\(todoID)] onSubmit → commitEdit")
+                        commitEdit()
+                    }
+                    .onExitCommand {
+                        Log.editing.debug("[\(todoID)] onExitCommand → cancelEdit")
+                        cancelEdit()
+                    }
                     .onChange(of: titleFieldFocused) { _, focused in
-                        if !focused && !isSettingUpFocus { commitEdit() }
+                        Log.focus.debug("[\(todoID)] titleFieldFocused changed: \(focused)")
+                    }
+                    .onChange(of: isSelected) { _, selected in
+                        if !selected {
+                            Log.editing.debug("[\(todoID)] isSelected→false while editing → commitEdit")
+                            commitEdit()
+                        }
                     }
             } else {
                 Text(todo.title.isEmpty ? "Untitled" : todo.title)
@@ -142,23 +155,26 @@ struct TaskRowView: View {
         .preference(key: InlineEditingKey.self, value: isEditing)
         .onHover { isHovered = $0 }
         .onAppear {
+            Log.view.debug("[\(todoID)] onAppear – startInEditMode=\(startInEditMode), isEditing=\(isEditing)")
             if startInEditMode {
                 editingTitle = todo.title
                 isEditing = true
-                isSettingUpFocus = true
+                Log.editing.info("[\(todoID)] entering edit mode from onAppear")
                 onEditingChanged?(true)
                 onEditModeStarted?()
                 DispatchQueue.main.async {
                     titleFieldFocused = true
-                    DispatchQueue.main.async {
-                        isSettingUpFocus = false
-                    }
+                    Log.focus.debug("[\(todoID)] titleFieldFocused set to true (deferred)")
                 }
             }
+        }
+        .onDisappear {
+            Log.view.debug("[\(todoID)] onDisappear – isEditing=\(isEditing)")
         }
     }
 
     private func startEditing() {
+        Log.editing.info("[\(todoID)] startEditing (double-tap)")
         editingTitle = todo.title
         isEditing = true
         titleFieldFocused = true
@@ -167,12 +183,14 @@ struct TaskRowView: View {
 
     private func commitEdit() {
         guard isEditing else { return }
+        Log.editing.info("[\(todoID)] commitEdit – title: \"\(editingTitle)\"")
         todo.title = editingTitle
         isEditing = false
         onEditingChanged?(false)
     }
 
     private func cancelEdit() {
+        Log.editing.info("[\(todoID)] cancelEdit")
         isEditing = false
         onEditingChanged?(false)
     }

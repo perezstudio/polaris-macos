@@ -142,18 +142,21 @@ struct AllTasksView: View {
             }
         }
         .onAppear { syncState() }
-        .onChange(of: allTodos.count) {
+        .onChange(of: allTodos.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[AllTasksView] allTodos.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: allTodos.map(\.persistentModelID)) {
             guard !isDragging else { return }
+            Log.data.debug("[AllTasksView] allTodos IDs changed → syncState (animated)")
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
             }
         }
-        .onChange(of: projects.count) {
+        .onChange(of: projects.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[AllTasksView] projects.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: selectionStore.addTaskRequested) { _, requested in
@@ -240,6 +243,8 @@ struct AllTasksView: View {
         let maxOrder = allTodos.map(\.sortOrder).max() ?? -1
         let todo = Todo(title: "", sortOrder: maxOrder + 1)
         modelContext.insert(todo)
+        try? modelContext.save()
+        Log.data.info("[AllTasksView] addTask – saved, ID: \(todo.persistentModelID.hashValue)")
         selectionStore.selectedTodo = todo
         newlyCreatedTodoID = todo.persistentModelID
         if windowState.isInspectorCollapsed {

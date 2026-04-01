@@ -274,12 +274,14 @@ struct ScheduledView: View {
             }
         }
         .onAppear { syncState() }
-        .onChange(of: allTodos.count) {
+        .onChange(of: allTodos.count) { old, new in
             guard !isDragging else { return }
+            Log.data.debug("[ScheduledView] allTodos.count changed: \(old) → \(new) → syncState")
             syncState()
         }
         .onChange(of: allTodos.map(\.persistentModelID)) {
             guard !isDragging else { return }
+            Log.data.debug("[ScheduledView] allTodos IDs changed → syncState (animated)")
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
             }
@@ -370,6 +372,8 @@ struct ScheduledView: View {
         let todo = Todo(title: "", sortOrder: maxOrder + 1)
         todo.dueDate = tomorrow
         modelContext.insert(todo)
+        try? modelContext.save()
+        Log.data.info("[ScheduledView] addTask – saved, ID: \(todo.persistentModelID.hashValue)")
         selectionStore.selectedTodo = todo
         newlyCreatedTodoID = todo.persistentModelID
         if windowState.isInspectorCollapsed {
