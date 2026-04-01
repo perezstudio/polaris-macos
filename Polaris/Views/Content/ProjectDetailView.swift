@@ -83,6 +83,15 @@ struct ProjectDetailView: View {
         .onPreferenceChange(InlineEditingKey.self) { editing in
             Log.editing.debug("[ProjectDetailView] isEditingInline changed: \(editing)")
             isEditingInline = editing
+            if editing {
+                isListFocused = false
+                Log.focus.debug("[ProjectDetailView] yielded focus for inline editing")
+            } else {
+                DispatchQueue.main.async {
+                    isListFocused = true
+                    Log.focus.debug("[ProjectDetailView] reclaimed focus after inline editing")
+                }
+            }
         }
         .onAppear { isListFocused = true }
         .onKeyPress(.upArrow) {

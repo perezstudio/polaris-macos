@@ -199,16 +199,44 @@ struct InspectorView: View {
                 }
 
                 fieldRow(icon: "flag.fill", label: "Priority") {
-                    Picker("", selection: Binding(
-                        get: { todo.priority },
-                        set: { todo.priority = $0 }
-                    )) {
+                    Menu {
                         ForEach(Priority.allCases, id: \.self) { priority in
-                            Text(priority.label).tag(priority)
+                            Button {
+                                todo.priority = priority
+                            } label: {
+                                HStack {
+                                    if priority == .none {
+                                        Image(systemName: "minus")
+                                    } else {
+                                        Image(systemName: "cellularbars", variableValue: priority.variableValue)
+                                    }
+                                    Text(priority.label)
+                                    if todo.priority == priority {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            .tint(Color.fromString(priority.color))
+                        }
+                    } label: {
+                        Label {
+                            Text(todo.priority.label)
+                                .font(.appScaled(size: 12))
+                        } icon: {
+                            Group {
+                                if todo.priority == .none {
+                                    Image(systemName: "minus")
+                                        .tint(.primary)
+                                } else {
+                                    Image(systemName: "cellularbars", variableValue: todo.priority.variableValue)
+                                        .tint(Color.fromString(todo.priority.color))
+                                }
+                            }
                         }
                     }
-                    .labelsHidden()
-                    .controlSize(.small)
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
 
                 fieldRow(icon: "calendar", label: "Due Date") {

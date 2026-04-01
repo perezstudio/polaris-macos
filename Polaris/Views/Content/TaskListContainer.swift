@@ -101,6 +101,15 @@ struct TaskListContainer<Content: View>: View {
         .onPreferenceChange(InlineEditingKey.self) { editing in
             Log.editing.debug("[TaskListContainer:\(title)] isEditingInline changed: \(editing)")
             isEditingInline = editing
+            if editing {
+                isListFocused = false
+                Log.focus.debug("[TaskListContainer:\(title)] yielded focus for inline editing")
+            } else {
+                DispatchQueue.main.async {
+                    isListFocused = true
+                    Log.focus.debug("[TaskListContainer:\(title)] reclaimed focus after inline editing")
+                }
+            }
         }
         .onChange(of: isListFocused) { _, focused in
             Log.focus.debug("[TaskListContainer:\(title)] isListFocused changed: \(focused)")

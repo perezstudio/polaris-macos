@@ -180,21 +180,11 @@ struct TaskCardView: View {
                     .foregroundStyle(Color.fromString(tag.color))
             }
 
-            if todo.priority != .low {
-                Image(systemName: priorityIcon)
+            if todo.priority != .none {
+                Image(systemName: "cellularbars", variableValue: todo.priority.variableValue)
                     .font(.appScaled(size: 11))
                     .foregroundStyle(Color.fromString(todo.priority.color))
             }
-        }
-    }
-
-    private var priorityIcon: String {
-        switch todo.priority {
-        case .none: "minus"
-        case .low: "arrow.down"
-        case .medium: "minus"
-        case .high: "arrow.up"
-        case .urgent: "exclamationmark.2"
         }
     }
 

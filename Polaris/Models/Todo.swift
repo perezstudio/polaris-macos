@@ -26,10 +26,20 @@ enum Priority: Int, Codable, CaseIterable {
     var color: String {
         switch self {
         case .none: "gray"
-        case .low: "gray"
-        case .medium: "blue"
+        case .low: "green"
+        case .medium: "yellow"
         case .high: "orange"
         case .urgent: "red"
+        }
+    }
+
+    var variableValue: Double {
+        switch self {
+        case .none: 0.0
+        case .low: 0.25
+        case .medium: 0.5
+        case .high: 0.75
+        case .urgent: 1.0
         }
     }
 }

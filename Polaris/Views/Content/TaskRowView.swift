@@ -196,19 +196,9 @@ struct TaskRowView: View {
     }
 
     private var priorityBadge: some View {
-        Image(systemName: priorityIcon)
+        Image(systemName: "cellularbars", variableValue: todo.priority.variableValue)
             .font(.appScaled(size: 11))
             .foregroundStyle(Color.fromString(todo.priority.color))
-    }
-
-    private var priorityIcon: String {
-        switch todo.priority {
-        case .none: "minus"
-        case .low: "arrow.down"
-        case .medium: "minus"
-        case .high: "arrow.up"
-        case .urgent: "exclamationmark.2"
-        }
     }
 
     private func isPastDue(_ date: Date) -> Bool {
