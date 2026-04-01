@@ -18,6 +18,7 @@ struct TaskRowView: View {
     @State private var isEditing = false
     @State private var editingTitle = ""
     @State private var lastTitleTapTime: Date?
+    @State private var isSettingUpFocus = false
     @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
@@ -54,7 +55,7 @@ struct TaskRowView: View {
                     .onSubmit { commitEdit() }
                     .onExitCommand { cancelEdit() }
                     .onChange(of: titleFieldFocused) { _, focused in
-                        if !focused { commitEdit() }
+                        if !focused && !isSettingUpFocus { commitEdit() }
                     }
             } else {
                 Text(todo.title.isEmpty ? "Untitled" : todo.title)
@@ -138,11 +139,21 @@ struct TaskRowView: View {
                 onSelect?()
             }
         }
+        .preference(key: InlineEditingKey.self, value: isEditing)
         .onHover { isHovered = $0 }
         .onAppear {
             if startInEditMode {
-                startEditing()
+                editingTitle = todo.title
+                isEditing = true
+                isSettingUpFocus = true
+                onEditingChanged?(true)
                 onEditModeStarted?()
+                DispatchQueue.main.async {
+                    titleFieldFocused = true
+                    DispatchQueue.main.async {
+                        isSettingUpFocus = false
+                    }
+                }
             }
         }
     }

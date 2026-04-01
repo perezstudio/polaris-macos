@@ -10,6 +10,16 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - Inline Editing Preference Key
+
+/// Propagates inline editing state from TaskRowView up to TaskListContainer.
+struct InlineEditingKey: PreferenceKey {
+    static var defaultValue: Bool = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
 struct TaskListContainer<Content: View>: View {
     let title: String
     let icon: String
@@ -85,15 +95,20 @@ struct TaskListContainer<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
-        .focusable()
+        .focusable(!isEditingInline)
         .focused($isListFocused)
         .focusEffectDisabled()
+        .onPreferenceChange(InlineEditingKey.self) { editing in
+            isEditingInline = editing
+        }
         .onAppear { isListFocused = true }
         .onKeyPress(.upArrow) {
+            guard !isEditingInline else { return .ignored }
             navigateSelection(direction: -1)
             return .handled
         }
         .onKeyPress(.downArrow) {
+            guard !isEditingInline else { return .ignored }
             navigateSelection(direction: 1)
             return .handled
         }

@@ -113,6 +113,7 @@ struct SectionHeaderView: View {
                 .fill(sectionColor.opacity(0.1))
         )
         .contentShape(Rectangle())
+        .preference(key: InlineEditingKey.self, value: isEditing)
         .onHover { isHovered = $0 }
         .contextMenu {
             sectionMenu

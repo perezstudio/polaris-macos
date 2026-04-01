@@ -77,15 +77,20 @@ struct ProjectDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .ignoresSafeArea(edges: .top)
-        .focusable()
+        .focusable(!isEditingInline)
         .focused($isListFocused)
         .focusEffectDisabled()
+        .onPreferenceChange(InlineEditingKey.self) { editing in
+            isEditingInline = editing
+        }
         .onAppear { isListFocused = true }
         .onKeyPress(.upArrow) {
+            guard !isEditingInline else { return .ignored }
             navigateSelection(direction: -1)
             return .handled
         }
         .onKeyPress(.downArrow) {
+            guard !isEditingInline else { return .ignored }
             navigateSelection(direction: 1)
             return .handled
         }
