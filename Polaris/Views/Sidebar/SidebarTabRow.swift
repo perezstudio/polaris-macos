@@ -10,6 +10,7 @@ import SwiftUI
 struct SidebarTabRow: View {
     let tab: SidebarTab
     let isSelected: Bool
+    var badgeCount: Int = 0
     let onSelect: () -> Void
 
     @State private var isHovered = false
@@ -30,6 +31,18 @@ struct SidebarTabRow: View {
                 .padding(.leading, 6)
 
             Spacer(minLength: 0)
+
+            if badgeCount > 0 {
+                Text("\(badgeCount)")
+                    .font(.appScaled(size: 11, weight: .bold))
+                    .foregroundStyle(.background)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(.tertiary)
+                    )
+            }
 
             Spacer()
                 .frame(width: 10)

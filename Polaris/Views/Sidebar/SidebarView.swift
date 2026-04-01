@@ -10,10 +10,19 @@ import UniformTypeIdentifiers
 struct SidebarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Project.sortOrder) private var projects: [Project]
+    @Query(filter: #Predicate<Todo> { !$0.isCompleted }) private var allIncompleteTodos: [Todo]
 
     let selectionStore: SelectionStore
     let windowState: WindowStateModel
     var onToggleSidebar: (() -> Void)?
+
+    private var inboxCount: Int {
+        allIncompleteTodos.filter { $0.project == nil }.count
+    }
+
+    private var todayCount: Int {
+        allIncompleteTodos.filter(\.isToday).count
+    }
 
     @State private var editingProject: Project?
     @State private var renamingProjectId: PersistentIdentifier?
@@ -31,6 +40,7 @@ struct SidebarView: View {
                         SidebarTabRow(
                             tab: .inbox,
                             isSelected: selectionStore.selectedTab == .inbox,
+                            badgeCount: inboxCount,
                             onSelect: { selectionStore.selectedTab = .inbox }
                         )
                     }
@@ -44,6 +54,7 @@ struct SidebarView: View {
                             SidebarTabRow(
                                 tab: tab,
                                 isSelected: selectionStore.selectedTab == tab,
+                                badgeCount: tab == .today ? todayCount : 0,
                                 onSelect: { selectionStore.selectedTab = tab }
                             )
                         }

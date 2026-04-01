@@ -16,7 +16,7 @@ struct InboxView: View {
     var onToggleInspector: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Todo> { $0.project == nil },
+    @Query(filter: #Predicate<Todo> { $0.project == nil && !$0.isCompleted },
            sort: [SortDescriptor(\Todo.sortOrder)])
     private var inboxTodos: [Todo]
 

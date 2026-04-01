@@ -262,12 +262,14 @@ struct TodayView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: {
                 selectionStore.selectedTodo = todo
                 if windowState.isInspectorCollapsed {
                     onToggleInspector?()
                 }
-            }
+            },
+            onEditModeStarted: { newlyCreatedTodoID = nil }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
@@ -300,12 +302,14 @@ struct TodayView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: {
                 selectionStore.selectedTodo = todo
                 if windowState.isInspectorCollapsed {
                     onToggleInspector?()
                 }
-            }
+            },
+            onEditModeStarted: { newlyCreatedTodoID = nil }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
