@@ -121,7 +121,12 @@ struct TaskListContainer<Content: View>: View {
                 return .ignored
             }
             Log.shortcut.debug("[TaskListContainer:\(title)] ↑ handled")
-            navigateSelection(direction: -1)
+            let isShift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+            if isShift {
+                navigateSelectionExtending(direction: -1)
+            } else {
+                navigateSelection(direction: -1)
+            }
             return .handled
         }
         .onKeyPress(.downArrow) {
@@ -130,7 +135,12 @@ struct TaskListContainer<Content: View>: View {
                 return .ignored
             }
             Log.shortcut.debug("[TaskListContainer:\(title)] ↓ handled")
-            navigateSelection(direction: 1)
+            let isShift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+            if isShift {
+                navigateSelectionExtending(direction: 1)
+            } else {
+                navigateSelection(direction: 1)
+            }
             return .handled
         }
         .onKeyPress(.return) {
@@ -213,8 +223,8 @@ struct TaskListContainer<Content: View>: View {
 
         guard let current = selectionStore.selectedTodo,
               let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
-            selectionStore.selectedTodo = todos.first
             if let first = todos.first {
+                selectionStore.selectSingle(first)
                 expandInspector(for: first)
                 scrollToTodo(first)
             }
@@ -224,8 +234,28 @@ struct TaskListContainer<Content: View>: View {
         let newIndex = currentIndex + direction
         guard newIndex >= 0 && newIndex < todos.count else { return }
         let todo = todos[newIndex]
-        selectionStore.selectedTodo = todo
+        selectionStore.selectSingle(todo)
         expandInspector(for: todo)
+        scrollToTodo(todo)
+    }
+
+    private func navigateSelectionExtending(direction: Int) {
+        let todos = allTodos
+        guard !todos.isEmpty else { return }
+
+        guard let current = selectionStore.selectedTodo,
+              let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
+            if let first = todos.first {
+                selectionStore.selectSingle(first)
+                scrollToTodo(first)
+            }
+            return
+        }
+
+        let newIndex = currentIndex + direction
+        guard newIndex >= 0 && newIndex < todos.count else { return }
+        let todo = todos[newIndex]
+        selectionStore.extendSelectionStep(to: todo)
         scrollToTodo(todo)
     }
 
@@ -243,7 +273,7 @@ struct TaskListContainer<Content: View>: View {
     }
 
     private func deselectTask() {
-        selectionStore.selectedTodo = nil
+        selectionStore.clearSelection()
         if !windowState.isInspectorCollapsed {
             onToggleInspector?()
         }

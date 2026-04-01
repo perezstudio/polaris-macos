@@ -119,15 +119,19 @@ struct LogbookView: View {
 
     @ViewBuilder
     private func taskRow(for todo: Todo) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
-            onSelect: {
-                selectionStore.selectedTodo = todo
-                if windowState.isInspectorCollapsed {
-                    onToggleInspector?()
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: flatTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    if windowState.isInspectorCollapsed {
+                        onToggleInspector?()
+                    }
                 }
             }
         )

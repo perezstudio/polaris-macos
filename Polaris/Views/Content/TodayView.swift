@@ -28,6 +28,7 @@ struct TodayView: View {
     @State private var groupTodosMap: [String: [Todo]] = [:]
     @State private var orderedGroupIds: [String] = []
     @State private var draggedTodoModelID: PersistentIdentifier?
+    @State private var draggedTodoModelIDs: Set<PersistentIdentifier> = []
     @State private var isDragging = false
     @State private var collapsedSections: Set<String> = []
     @State private var highlightedSection: String?
@@ -150,6 +151,7 @@ struct TodayView: View {
                         orderedOverdue: $orderedOverdue,
                         groupTodosMap: $groupTodosMap,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         isDragging: $isDragging,
                         highlightedSection: $highlightedSection,
                         modelContext: modelContext
@@ -167,6 +169,7 @@ struct TodayView: View {
                                 orderedOverdue: $orderedOverdue,
                                 groupTodosMap: $groupTodosMap,
                                 draggedTodoModelID: $draggedTodoModelID,
+                                draggedTodoModelIDs: $draggedTodoModelIDs,
                                 isDragging: $isDragging,
                                 modelContext: modelContext
                             ))
@@ -190,6 +193,7 @@ struct TodayView: View {
                         orderedOverdue: $orderedOverdue,
                         groupTodosMap: $groupTodosMap,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         isDragging: $isDragging,
                         highlightedSection: $highlightedSection,
                         modelContext: modelContext
@@ -209,6 +213,7 @@ struct TodayView: View {
                                 orderedOverdue: $orderedOverdue,
                                 groupTodosMap: $groupTodosMap,
                                 draggedTodoModelID: $draggedTodoModelID,
+                                draggedTodoModelIDs: $draggedTodoModelIDs,
                                 isDragging: $isDragging,
                                 modelContext: modelContext
                             ))
@@ -259,17 +264,21 @@ struct TodayView: View {
 
     @ViewBuilder
     private func overdueTaskRow(for todo: Todo) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
+        let isBeingDragged = draggedTodoModelIDs.contains(todo.persistentModelID)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
-            onSelect: {
-                selectionStore.selectedTodo = todo
-                if windowState.isInspectorCollapsed {
-                    onToggleInspector?()
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: allVisibleTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    if windowState.isInspectorCollapsed {
+                        onToggleInspector?()
+                    }
                 }
             },
             onEditModeStarted: { newlyCreatedTodoID = nil }
@@ -278,6 +287,12 @@ struct TodayView: View {
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
         .onDrag {
             isDragging = true
+            if selectionStore.isSelected(todo) && selectionStore.selectedTodoIDs.count > 1 {
+                draggedTodoModelIDs = selectionStore.selectedTodoIDs
+            } else {
+                selectionStore.selectSingle(todo)
+                draggedTodoModelIDs = [todo.persistentModelID]
+            }
             draggedTodoModelID = todo.persistentModelID
             return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
         }
@@ -286,6 +301,7 @@ struct TodayView: View {
             orderedOverdue: $orderedOverdue,
             groupTodosMap: $groupTodosMap,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             isDragging: $isDragging,
             modelContext: modelContext
         ))
@@ -299,17 +315,21 @@ struct TodayView: View {
 
     @ViewBuilder
     private func groupTaskRow(for todo: Todo, groupId: String, project: Project?) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
+        let isBeingDragged = draggedTodoModelIDs.contains(todo.persistentModelID)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
-            onSelect: {
-                selectionStore.selectedTodo = todo
-                if windowState.isInspectorCollapsed {
-                    onToggleInspector?()
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: allVisibleTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    if windowState.isInspectorCollapsed {
+                        onToggleInspector?()
+                    }
                 }
             },
             onEditModeStarted: { newlyCreatedTodoID = nil }
@@ -318,6 +338,12 @@ struct TodayView: View {
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
         .onDrag {
             isDragging = true
+            if selectionStore.isSelected(todo) && selectionStore.selectedTodoIDs.count > 1 {
+                draggedTodoModelIDs = selectionStore.selectedTodoIDs
+            } else {
+                selectionStore.selectSingle(todo)
+                draggedTodoModelIDs = [todo.persistentModelID]
+            }
             draggedTodoModelID = todo.persistentModelID
             return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
         }
@@ -328,6 +354,7 @@ struct TodayView: View {
             orderedOverdue: $orderedOverdue,
             groupTodosMap: $groupTodosMap,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             isDragging: $isDragging,
             modelContext: modelContext
         ))
@@ -405,6 +432,16 @@ private func removeTodoFromAll(
     return removeTodoFromGroups(draggedId: draggedId, groups: &groups)
 }
 
+private func removeTodosFromAll(
+    draggedIds: Set<PersistentIdentifier>,
+    overdue: inout [Todo],
+    groups: inout [String: [Todo]]
+) -> [Todo] {
+    var removed = removeTodosFromArray(draggedIds: draggedIds, array: &overdue)
+    removed.append(contentsOf: removeTodosFromGroups(draggedIds: draggedIds, groups: &groups))
+    return removed
+}
+
 // MARK: - Drop Delegates (Overdue Section)
 
 private struct TodayOverdueTodoDropDelegate: DropDelegate {
@@ -412,20 +449,22 @@ private struct TodayOverdueTodoDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID,
-              draggedId != targetTodo.persistentModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty,
+              !draggedTodoModelIDs.contains(targetTodo.persistentModelID) else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
+            guard !dragged.isEmpty else { return }
             if let idx = orderedOverdue.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                orderedOverdue.insert(dragged, at: idx)
+                orderedOverdue.insert(contentsOf: dragged, at: idx)
             } else {
-                orderedOverdue.append(dragged)
+                orderedOverdue.append(contentsOf: dragged)
             }
         }
     }
@@ -436,6 +475,7 @@ private struct TodayOverdueTodoDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -445,18 +485,19 @@ private struct TodayOverdueSectionDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     @Binding var highlightedSection: String?
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
         highlightedSection = "overdue"
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
-            orderedOverdue.append(dragged)
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
+            orderedOverdue.append(contentsOf: dragged)
         }
     }
 
@@ -468,6 +509,7 @@ private struct TodayOverdueSectionDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -477,16 +519,17 @@ private struct TodayOverdueEndDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
-            orderedOverdue.append(dragged)
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
+            orderedOverdue.append(contentsOf: dragged)
         }
     }
 
@@ -496,6 +539,7 @@ private struct TodayOverdueEndDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -510,21 +554,23 @@ private struct TodayGroupTodoDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID,
-              draggedId != targetTodo.persistentModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty,
+              !draggedTodoModelIDs.contains(targetTodo.persistentModelID) else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
+            guard !dragged.isEmpty else { return }
             var list = groupTodosMap[targetGroupId] ?? []
             if let idx = list.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                list.insert(dragged, at: idx)
+                list.insert(contentsOf: dragged, at: idx)
             } else {
-                list.append(dragged)
+                list.append(contentsOf: dragged)
             }
             groupTodosMap[targetGroupId] = list
         }
@@ -533,14 +579,13 @@ private struct TodayGroupTodoDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        // Update project + date when dropped into a project group
-        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+        // Update project + date for all dragged todos in target group
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
             todo.project = targetProject
             todo.section = nil
-            // If was overdue, update date to today
-            let startOfToday = Calendar.current.startOfDay(for: Date())
             if let due = todo.dueDate, due < startOfToday { todo.dueDate = startOfToday }
             if let deadline = todo.deadlineDate, deadline < startOfToday { todo.deadlineDate = startOfToday }
         }
@@ -548,6 +593,7 @@ private struct TodayGroupTodoDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -559,19 +605,20 @@ private struct TodayGroupSectionDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     @Binding var highlightedSection: String?
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
         highlightedSection = targetGroupId
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
             var list = groupTodosMap[targetGroupId] ?? []
-            list.append(dragged)
+            list.append(contentsOf: dragged)
             groupTodosMap[targetGroupId] = list
         }
     }
@@ -580,13 +627,13 @@ private struct TodayGroupSectionDropDelegate: DropDelegate {
     func dropExited(info: DropInfo) { highlightedSection = nil }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
         highlightedSection = nil
 
-        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
             todo.project = targetProject
             todo.section = nil
-            let startOfToday = Calendar.current.startOfDay(for: Date())
             if let due = todo.dueDate, due < startOfToday { todo.dueDate = startOfToday }
             if let deadline = todo.deadlineDate, deadline < startOfToday { todo.deadlineDate = startOfToday }
         }
@@ -594,6 +641,7 @@ private struct TodayGroupSectionDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -605,17 +653,18 @@ private struct TodayGroupEndDropDelegate: DropDelegate {
     @Binding var orderedOverdue: [Todo]
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAll(draggedId: draggedId, overdue: &orderedOverdue, groups: &groupTodosMap) else { return }
+            let dragged = removeTodosFromAll(draggedIds: draggedTodoModelIDs, overdue: &orderedOverdue, groups: &groupTodosMap)
             var list = groupTodosMap[targetGroupId] ?? []
-            list.append(dragged)
+            list.append(contentsOf: dragged)
             groupTodosMap[targetGroupId] = list
         }
     }
@@ -623,12 +672,12 @@ private struct TodayGroupEndDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
             todo.project = targetProject
             todo.section = nil
-            let startOfToday = Calendar.current.startOfDay(for: Date())
             if let due = todo.dueDate, due < startOfToday { todo.dueDate = startOfToday }
             if let deadline = todo.deadlineDate, deadline < startOfToday { todo.deadlineDate = startOfToday }
         }
@@ -636,6 +685,7 @@ private struct TodayGroupEndDropDelegate: DropDelegate {
         for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }

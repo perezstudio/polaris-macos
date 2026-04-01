@@ -18,6 +18,7 @@ struct ProjectDetailView: View {
     @Query(sort: \Project.sortOrder) private var allProjects: [Project]
     @FocusState private var isListFocused: Bool
     @State private var draggedTodoModelID: PersistentIdentifier?
+    @State private var draggedTodoModelIDs: Set<PersistentIdentifier> = []
     @State private var draggedSectionId: PersistentIdentifier?
     @State private var collapsedForDrag: Set<PersistentIdentifier> = []
     @State private var orderedUnsectionedTodos: [Todo] = []
@@ -99,7 +100,12 @@ struct ProjectDetailView: View {
                 Log.shortcut.debug("[ProjectDetailView] ↑ ignored (editing inline)")
                 return .ignored
             }
-            navigateSelection(direction: -1)
+            let isShift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+            if isShift {
+                navigateSelectionExtending(direction: -1)
+            } else {
+                navigateSelection(direction: -1)
+            }
             return .handled
         }
         .onKeyPress(.downArrow) {
@@ -107,7 +113,12 @@ struct ProjectDetailView: View {
                 Log.shortcut.debug("[ProjectDetailView] ↓ ignored (editing inline)")
                 return .ignored
             }
-            navigateSelection(direction: 1)
+            let isShift = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+            if isShift {
+                navigateSelectionExtending(direction: 1)
+            } else {
+                navigateSelection(direction: 1)
+            }
             return .handled
         }
         .onKeyPress(.return) {
@@ -247,6 +258,7 @@ struct ProjectDetailView: View {
             orderedUnsectionedTodos: $orderedUnsectionedTodos,
             sectionTodosMap: $sectionTodosMap,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             draggedSectionId: $draggedSectionId,
             orderedSections: $orderedSections,
             collapsedForDrag: $collapsedForDrag,
@@ -286,7 +298,7 @@ struct ProjectDetailView: View {
                         }
 
                         // Drop target at end of unsectioned list
-                        if !orderedUnsectionedTodos.isEmpty || draggedTodoModelID != nil {
+                        if !orderedUnsectionedTodos.isEmpty || !draggedTodoModelIDs.isEmpty {
                             Color.clear
                                 .frame(height: 8)
                                 .contentShape(Rectangle())
@@ -295,6 +307,7 @@ struct ProjectDetailView: View {
                                     orderedUnsectionedTodos: $orderedUnsectionedTodos,
                                     sectionTodosMap: $sectionTodosMap,
                                     draggedTodoModelID: $draggedTodoModelID,
+                                    draggedTodoModelIDs: $draggedTodoModelIDs,
                                     draggedSectionId: $draggedSectionId,
                                     orderedSections: $orderedSections,
                                     collapsedForDrag: $collapsedForDrag,
@@ -323,6 +336,7 @@ struct ProjectDetailView: View {
                         orderedUnsectionedTodos: $orderedUnsectionedTodos,
                         sectionTodosMap: $sectionTodosMap,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         draggedSectionId: $draggedSectionId,
                         orderedSections: $orderedSections,
                         collapsedForDrag: $collapsedForDrag,
@@ -409,6 +423,7 @@ struct ProjectDetailView: View {
                 orderedSections: $orderedSections,
                 draggedSectionId: $draggedSectionId,
                 draggedTodoModelID: $draggedTodoModelID,
+                draggedTodoModelIDs: $draggedTodoModelIDs,
                 orderedUnsectionedTodos: $orderedUnsectionedTodos,
                 sectionTodosMap: $sectionTodosMap,
                 collapsedForDrag: $collapsedForDrag,
@@ -431,6 +446,7 @@ struct ProjectDetailView: View {
                         orderedUnsectionedTodos: $orderedUnsectionedTodos,
                         sectionTodosMap: $sectionTodosMap,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         draggedSectionId: $draggedSectionId,
                         orderedSections: $orderedSections,
                         collapsedForDrag: $collapsedForDrag,
@@ -445,17 +461,21 @@ struct ProjectDetailView: View {
 
     @ViewBuilder
     private func taskRow(for todo: Todo, inSection section: Section?) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
+        let isBeingDragged = draggedTodoModelIDs.contains(todo.persistentModelID)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
-            onSelect: {
-                selectionStore.selectedTodo = todo
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: allVisibleTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    expandInspector(for: todo)
+                }
                 isListFocused = true
-                expandInspector(for: todo)
             },
             onEditModeStarted: {
                 newlyCreatedTodoID = nil
@@ -469,6 +489,12 @@ struct ProjectDetailView: View {
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
         .onDrag {
             isDragging = true
+            if selectionStore.isSelected(todo) && selectionStore.selectedTodoIDs.count > 1 {
+                draggedTodoModelIDs = selectionStore.selectedTodoIDs
+            } else {
+                selectionStore.selectSingle(todo)
+                draggedTodoModelIDs = [todo.persistentModelID]
+            }
             draggedTodoModelID = todo.persistentModelID
             return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
         }
@@ -478,6 +504,7 @@ struct ProjectDetailView: View {
             orderedUnsectionedTodos: $orderedUnsectionedTodos,
             sectionTodosMap: $sectionTodosMap,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             draggedSectionId: $draggedSectionId,
             orderedSections: $orderedSections,
             collapsedForDrag: $collapsedForDrag,
@@ -508,8 +535,8 @@ struct ProjectDetailView: View {
 
         guard let current = selectionStore.selectedTodo,
               let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
-            selectionStore.selectedTodo = todos.first
             if let first = todos.first {
+                selectionStore.selectSingle(first)
                 expandInspector(for: first)
                 scrollToTodo(first)
             }
@@ -519,8 +546,28 @@ struct ProjectDetailView: View {
         let newIndex = currentIndex + direction
         guard newIndex >= 0 && newIndex < todos.count else { return }
         let todo = todos[newIndex]
-        selectionStore.selectedTodo = todo
+        selectionStore.selectSingle(todo)
         expandInspector(for: todo)
+        scrollToTodo(todo)
+    }
+
+    private func navigateSelectionExtending(direction: Int) {
+        let todos = allVisibleTodos
+        guard !todos.isEmpty else { return }
+
+        guard let current = selectionStore.selectedTodo,
+              let currentIndex = todos.firstIndex(where: { $0.persistentModelID == current.persistentModelID }) else {
+            if let first = todos.first {
+                selectionStore.selectSingle(first)
+                scrollToTodo(first)
+            }
+            return
+        }
+
+        let newIndex = currentIndex + direction
+        guard newIndex >= 0 && newIndex < todos.count else { return }
+        let todo = todos[newIndex]
+        selectionStore.extendSelectionStep(to: todo)
         scrollToTodo(todo)
     }
 
@@ -538,7 +585,7 @@ struct ProjectDetailView: View {
     }
 
     private func deselectTask() {
-        selectionStore.selectedTodo = nil
+        selectionStore.clearSelection()
         if !windowState.isInspectorCollapsed {
             onToggleInspector?()
         }
@@ -771,6 +818,33 @@ private func removeTodoFromAllArrays(
     return nil
 }
 
+/// Removes multiple todos by ID from ALL UI arrays, preserving relative order.
+/// Returns the removed todos in their original order.
+private func removeTodosFromAllArrays(
+    draggedIds: Set<PersistentIdentifier>,
+    unsectioned: inout [Todo],
+    sectionMap: inout [PersistentIdentifier: [Todo]]
+) -> [Todo] {
+    var removed: [Todo] = []
+    unsectioned.removeAll { todo in
+        if draggedIds.contains(todo.persistentModelID) {
+            removed.append(todo)
+            return true
+        }
+        return false
+    }
+    for key in sectionMap.keys {
+        sectionMap[key]?.removeAll { todo in
+            if draggedIds.contains(todo.persistentModelID) {
+                removed.append(todo)
+                return true
+            }
+            return false
+        }
+    }
+    return removed
+}
+
 /// Persists sortOrder for all UI arrays and saves.
 private func persistAllSortOrders(
     unsectioned: [Todo],
@@ -795,6 +869,29 @@ private func persistAllSortOrders(
     try? modelContext.save()
 }
 
+/// Persists sortOrder for all UI arrays and assigns section for multiple dragged todos.
+private func persistAllSortOrdersMulti(
+    unsectioned: [Todo],
+    sectionMap: [PersistentIdentifier: [Todo]],
+    targetSection: Section?,
+    draggedTodos: [Todo],
+    modelContext: ModelContext
+) {
+    for dragged in draggedTodos {
+        dragged.section = targetSection
+    }
+
+    for (i, todo) in unsectioned.enumerated() {
+        todo.sortOrder = i
+    }
+    for (_, todos) in sectionMap {
+        for (i, todo) in todos.enumerated() {
+            todo.sortOrder = i
+        }
+    }
+    try? modelContext.save()
+}
+
 // MARK: - Drop Delegates
 
 private struct TodoDropDelegate: DropDelegate {
@@ -803,6 +900,7 @@ private struct TodoDropDelegate: DropDelegate {
     @Binding var orderedUnsectionedTodos: [Todo]
     @Binding var sectionTodosMap: [PersistentIdentifier: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var draggedSectionId: PersistentIdentifier?
     @Binding var orderedSections: [Section]
     @Binding var collapsedForDrag: Set<PersistentIdentifier>
@@ -810,33 +908,33 @@ private struct TodoDropDelegate: DropDelegate {
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID,
-              draggedId != targetTodo.persistentModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty,
+              !draggedTodoModelIDs.contains(targetTodo.persistentModelID) else { return }
 
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            // Remove from wherever it currently is in UI arrays
-            guard let dragged = removeTodoFromAllArrays(
-                draggedId: draggedId,
+            let dragged = removeTodosFromAllArrays(
+                draggedIds: draggedTodoModelIDs,
                 unsectioned: &orderedUnsectionedTodos,
                 sectionMap: &sectionTodosMap
-            ) else { return }
+            )
+            guard !dragged.isEmpty else { return }
 
             // Insert at target position
             if let tgtSectionId = targetSection?.persistentModelID {
                 var list = sectionTodosMap[tgtSectionId] ?? []
                 if let toIndex = list.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                    list.insert(dragged, at: toIndex)
+                    list.insert(contentsOf: dragged, at: toIndex)
                 } else {
-                    list.append(dragged)
+                    list.append(contentsOf: dragged)
                 }
                 sectionTodosMap[tgtSectionId] = list
             } else {
                 if let toIndex = orderedUnsectionedTodos.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                    orderedUnsectionedTodos.insert(dragged, at: toIndex)
+                    orderedUnsectionedTodos.insert(contentsOf: dragged, at: toIndex)
                 } else {
-                    orderedUnsectionedTodos.append(dragged)
+                    orderedUnsectionedTodos.append(contentsOf: dragged)
                 }
             }
         }
@@ -861,20 +959,20 @@ private struct TodoDropDelegate: DropDelegate {
             return true
         }
 
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        // Find the dragged todo in UI arrays
-        let draggedTodo = orderedUnsectionedTodos.first(where: { $0.persistentModelID == draggedId })
-            ?? sectionTodosMap.values.flatMap({ $0 }).first(where: { $0.persistentModelID == draggedId })
+        let allTodos = orderedUnsectionedTodos + sectionTodosMap.values.flatMap({ $0 })
+        let draggedTodos = allTodos.filter { draggedTodoModelIDs.contains($0.persistentModelID) }
 
-        persistAllSortOrders(
+        persistAllSortOrdersMulti(
             unsectioned: orderedUnsectionedTodos,
             sectionMap: sectionTodosMap,
             targetSection: targetSection,
-            draggedTodo: draggedTodo,
+            draggedTodos: draggedTodos,
             modelContext: modelContext
         )
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -885,6 +983,7 @@ private struct SectionHeaderDropDelegate: DropDelegate {
     @Binding var orderedSections: [Section]
     @Binding var draggedSectionId: PersistentIdentifier?
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var orderedUnsectionedTodos: [Todo]
     @Binding var sectionTodosMap: [PersistentIdentifier: [Todo]]
     @Binding var collapsedForDrag: Set<PersistentIdentifier>
@@ -905,17 +1004,18 @@ private struct SectionHeaderDropDelegate: DropDelegate {
             return
         }
 
-        // Task dropped onto section header → add to end of section
-        if let draggedId = draggedTodoModelID {
+        // Tasks dropped onto section header → add to end of section
+        if !draggedTodoModelIDs.isEmpty {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                guard let dragged = removeTodoFromAllArrays(
-                    draggedId: draggedId,
+                let dragged = removeTodosFromAllArrays(
+                    draggedIds: draggedTodoModelIDs,
                     unsectioned: &orderedUnsectionedTodos,
                     sectionMap: &sectionTodosMap
-                ) else { return }
+                )
+                guard !dragged.isEmpty else { return }
 
                 var list = sectionTodosMap[targetSection.persistentModelID] ?? []
-                list.append(dragged)
+                list.append(contentsOf: dragged)
                 sectionTodosMap[targetSection.persistentModelID] = list
             }
         }
@@ -942,18 +1042,19 @@ private struct SectionHeaderDropDelegate: DropDelegate {
         }
 
         // Task drop onto section
-        if let draggedId = draggedTodoModelID {
-            let draggedTodo = orderedUnsectionedTodos.first(where: { $0.persistentModelID == draggedId })
-                ?? sectionTodosMap.values.flatMap({ $0 }).first(where: { $0.persistentModelID == draggedId })
+        if !draggedTodoModelIDs.isEmpty {
+            let allTodos = orderedUnsectionedTodos + sectionTodosMap.values.flatMap({ $0 })
+            let draggedTodos = allTodos.filter { draggedTodoModelIDs.contains($0.persistentModelID) }
 
-            persistAllSortOrders(
+            persistAllSortOrdersMulti(
                 unsectioned: orderedUnsectionedTodos,
                 sectionMap: sectionTodosMap,
                 targetSection: targetSection,
-                draggedTodo: draggedTodo,
+                draggedTodos: draggedTodos,
                 modelContext: modelContext
             )
             draggedTodoModelID = nil
+            draggedTodoModelIDs.removeAll()
             isDragging = false
             return true
         }
@@ -967,6 +1068,7 @@ private struct EndOfListDropDelegate: DropDelegate {
     @Binding var orderedUnsectionedTodos: [Todo]
     @Binding var sectionTodosMap: [PersistentIdentifier: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var draggedSectionId: PersistentIdentifier?
     @Binding var orderedSections: [Section]
     @Binding var collapsedForDrag: Set<PersistentIdentifier>
@@ -974,23 +1076,24 @@ private struct EndOfListDropDelegate: DropDelegate {
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromAllArrays(
-                draggedId: draggedId,
+            let dragged = removeTodosFromAllArrays(
+                draggedIds: draggedTodoModelIDs,
                 unsectioned: &orderedUnsectionedTodos,
                 sectionMap: &sectionTodosMap
-            ) else { return }
+            )
+            guard !dragged.isEmpty else { return }
 
             // Append to end of target group
             if let tgtSectionId = targetSection?.persistentModelID {
                 var list = sectionTodosMap[tgtSectionId] ?? []
-                list.append(dragged)
+                list.append(contentsOf: dragged)
                 sectionTodosMap[tgtSectionId] = list
             } else {
-                orderedUnsectionedTodos.append(dragged)
+                orderedUnsectionedTodos.append(contentsOf: dragged)
             }
         }
     }
@@ -1014,19 +1117,20 @@ private struct EndOfListDropDelegate: DropDelegate {
             return true
         }
 
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        let draggedTodo = orderedUnsectionedTodos.first(where: { $0.persistentModelID == draggedId })
-            ?? sectionTodosMap.values.flatMap({ $0 }).first(where: { $0.persistentModelID == draggedId })
+        let allTodos = orderedUnsectionedTodos + sectionTodosMap.values.flatMap({ $0 })
+        let draggedTodos = allTodos.filter { draggedTodoModelIDs.contains($0.persistentModelID) }
 
-        persistAllSortOrders(
+        persistAllSortOrdersMulti(
             unsectioned: orderedUnsectionedTodos,
             sectionMap: sectionTodosMap,
             targetSection: targetSection,
-            draggedTodo: draggedTodo,
+            draggedTodos: draggedTodos,
             modelContext: modelContext
         )
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -1036,6 +1140,7 @@ private struct BackgroundDropDelegate: DropDelegate {
     @Binding var orderedUnsectionedTodos: [Todo]
     @Binding var sectionTodosMap: [PersistentIdentifier: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var draggedSectionId: PersistentIdentifier?
     @Binding var orderedSections: [Section]
     @Binding var collapsedForDrag: Set<PersistentIdentifier>
@@ -1062,19 +1167,20 @@ private struct BackgroundDropDelegate: DropDelegate {
             return true
         }
 
-        // Task drop on background → unsection it
-        if let draggedId = draggedTodoModelID {
-            let draggedTodo = orderedUnsectionedTodos.first(where: { $0.persistentModelID == draggedId })
-                ?? sectionTodosMap.values.flatMap({ $0 }).first(where: { $0.persistentModelID == draggedId })
+        // Task drop on background → unsection them
+        if !draggedTodoModelIDs.isEmpty {
+            let allTodos = orderedUnsectionedTodos + sectionTodosMap.values.flatMap({ $0 })
+            let draggedTodos = allTodos.filter { draggedTodoModelIDs.contains($0.persistentModelID) }
 
-            persistAllSortOrders(
+            persistAllSortOrdersMulti(
                 unsectioned: orderedUnsectionedTodos,
                 sectionMap: sectionTodosMap,
                 targetSection: nil,
-                draggedTodo: draggedTodo,
+                draggedTodos: draggedTodos,
                 modelContext: modelContext
             )
             draggedTodoModelID = nil
+            draggedTodoModelIDs.removeAll()
             isDragging = false
             return true
         }

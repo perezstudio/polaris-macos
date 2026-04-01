@@ -26,6 +26,7 @@ struct AllTasksView: View {
     @State private var groupTodosMap: [String: [Todo]] = [:]
     @State private var orderedGroupIds: [String] = []
     @State private var draggedTodoModelID: PersistentIdentifier?
+    @State private var draggedTodoModelIDs: Set<PersistentIdentifier> = []
     @State private var isDragging = false
     @State private var highlightedGroupId: String?
     @State private var collapsedGroups: Set<String> = []
@@ -115,6 +116,7 @@ struct AllTasksView: View {
                         targetProject: group.project,
                         groupTodosMap: $groupTodosMap,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         isDragging: $isDragging,
                         highlightedGroupId: $highlightedGroupId,
                         modelContext: modelContext
@@ -134,6 +136,7 @@ struct AllTasksView: View {
                                 targetProject: group.project,
                                 groupTodosMap: $groupTodosMap,
                                 draggedTodoModelID: $draggedTodoModelID,
+                                draggedTodoModelIDs: $draggedTodoModelIDs,
                                 isDragging: $isDragging,
                                 modelContext: modelContext
                             ))
@@ -182,17 +185,21 @@ struct AllTasksView: View {
 
     @ViewBuilder
     private func taskRow(for todo: Todo, groupId: String, project: Project?) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
+        let isBeingDragged = draggedTodoModelIDs.contains(todo.persistentModelID)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
-            onSelect: {
-                selectionStore.selectedTodo = todo
-                if windowState.isInspectorCollapsed {
-                    onToggleInspector?()
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: allVisibleTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    if windowState.isInspectorCollapsed {
+                        onToggleInspector?()
+                    }
                 }
             },
             onEditModeStarted: { newlyCreatedTodoID = nil }
@@ -201,6 +208,12 @@ struct AllTasksView: View {
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
         .onDrag {
             isDragging = true
+            if selectionStore.isSelected(todo) && selectionStore.selectedTodoIDs.count > 1 {
+                draggedTodoModelIDs = selectionStore.selectedTodoIDs
+            } else {
+                selectionStore.selectSingle(todo)
+                draggedTodoModelIDs = [todo.persistentModelID]
+            }
             draggedTodoModelID = todo.persistentModelID
             return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
         }
@@ -210,6 +223,7 @@ struct AllTasksView: View {
             targetProject: project,
             groupTodosMap: $groupTodosMap,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             isDragging: $isDragging,
             modelContext: modelContext
         ))
@@ -276,23 +290,25 @@ private struct AllTasksTodoDropDelegate: DropDelegate {
     let targetProject: Project?
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID,
-              draggedId != targetTodo.persistentModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty,
+              !draggedTodoModelIDs.contains(targetTodo.persistentModelID) else { return }
 
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromGroups(draggedId: draggedId, groups: &groupTodosMap) else { return }
+            let dragged = removeTodosFromGroups(draggedIds: draggedTodoModelIDs, groups: &groupTodosMap)
+            guard !dragged.isEmpty else { return }
 
             var list = groupTodosMap[targetGroupId] ?? []
             if let toIndex = list.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                list.insert(dragged, at: toIndex)
+                list.insert(contentsOf: dragged, at: toIndex)
             } else {
-                list.append(dragged)
+                list.append(contentsOf: dragged)
             }
             groupTodosMap[targetGroupId] = list
         }
@@ -303,24 +319,22 @@ private struct AllTasksTodoDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        // Find which group the todo ended up in and update project
-        for (groupId, todos) in groupTodosMap {
-            if let todo = todos.first(where: { $0.persistentModelID == draggedId }) {
-                if groupId == "inbox" {
-                    todo.project = nil
-                } else {
-                    todo.project = targetProject
-                }
-                todo.section = nil
-                break
+        // Update project for all dragged todos in target group
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
+            if targetGroupId == "inbox" {
+                todo.project = nil
+            } else {
+                todo.project = targetProject
             }
+            todo.section = nil
         }
 
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
 
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -331,20 +345,20 @@ private struct AllTasksSectionDropDelegate: DropDelegate {
     let targetProject: Project?
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     @Binding var highlightedGroupId: String?
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
         highlightedGroupId = targetGroupId
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromGroups(draggedId: draggedId, groups: &groupTodosMap) else { return }
-
+            let dragged = removeTodosFromGroups(draggedIds: draggedTodoModelIDs, groups: &groupTodosMap)
             var list = groupTodosMap[targetGroupId] ?? []
-            list.append(dragged)
+            list.append(contentsOf: dragged)
             groupTodosMap[targetGroupId] = list
         }
     }
@@ -358,11 +372,10 @@ private struct AllTasksSectionDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
         highlightedGroupId = nil
 
-        // Update project assignment
-        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
             if targetGroupId == "inbox" {
                 todo.project = nil
             } else {
@@ -374,6 +387,7 @@ private struct AllTasksSectionDropDelegate: DropDelegate {
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
 
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -384,18 +398,18 @@ private struct AllTasksEndOfSectionDropDelegate: DropDelegate {
     let targetProject: Project?
     @Binding var groupTodosMap: [String: [Todo]]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromGroups(draggedId: draggedId, groups: &groupTodosMap) else { return }
-
+            let dragged = removeTodosFromGroups(draggedIds: draggedTodoModelIDs, groups: &groupTodosMap)
             var list = groupTodosMap[targetGroupId] ?? []
-            list.append(dragged)
+            list.append(contentsOf: dragged)
             groupTodosMap[targetGroupId] = list
         }
     }
@@ -405,9 +419,9 @@ private struct AllTasksEndOfSectionDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let draggedId = draggedTodoModelID else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
-        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+        for todo in groupTodosMap[targetGroupId] ?? [] where draggedTodoModelIDs.contains(todo.persistentModelID) {
             if targetGroupId == "inbox" {
                 todo.project = nil
             } else {
@@ -419,6 +433,7 @@ private struct AllTasksEndOfSectionDropDelegate: DropDelegate {
         persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
 
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }

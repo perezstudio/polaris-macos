@@ -23,6 +23,7 @@ struct InboxView: View {
     @State private var newlyCreatedTodoID: PersistentIdentifier?
     @State private var orderedTodos: [Todo] = []
     @State private var draggedTodoModelID: PersistentIdentifier?
+    @State private var draggedTodoModelIDs: Set<PersistentIdentifier> = []
     @State private var isDragging = false
 
     private var sortedTodos: [Todo] {
@@ -61,6 +62,7 @@ struct InboxView: View {
                     .onDrop(of: [.text], delegate: InboxEndOfListDropDelegate(
                         orderedTodos: $orderedTodos,
                         draggedTodoModelID: $draggedTodoModelID,
+                        draggedTodoModelIDs: $draggedTodoModelIDs,
                         isDragging: $isDragging,
                         modelContext: modelContext
                     ))
@@ -106,17 +108,21 @@ struct InboxView: View {
 
     @ViewBuilder
     private func taskRow(for todo: Todo) -> some View {
-        let isSelected = selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID
-        let isBeingDragged = draggedTodoModelID == todo.persistentModelID
+        let isSelected = selectionStore.isSelected(todo)
+        let isBeingDragged = draggedTodoModelIDs.contains(todo.persistentModelID)
 
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
-            onSelect: {
-                selectionStore.selectedTodo = todo
-                if windowState.isInspectorCollapsed {
-                    onToggleInspector?()
+            onSelect: { modifiers in
+                if modifiers.contains(.shift) {
+                    selectionStore.extendSelection(to: todo, in: orderedTodos)
+                } else {
+                    selectionStore.selectSingle(todo)
+                    if windowState.isInspectorCollapsed {
+                        onToggleInspector?()
+                    }
                 }
             },
             onEditModeStarted: {
@@ -127,6 +133,12 @@ struct InboxView: View {
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
         .onDrag {
             isDragging = true
+            if selectionStore.isSelected(todo) && selectionStore.selectedTodoIDs.count > 1 {
+                draggedTodoModelIDs = selectionStore.selectedTodoIDs
+            } else {
+                selectionStore.selectSingle(todo)
+                draggedTodoModelIDs = [todo.persistentModelID]
+            }
             draggedTodoModelID = todo.persistentModelID
             return NSItemProvider(object: todo.persistentModelID.hashValue.description as NSString)
         }
@@ -134,6 +146,7 @@ struct InboxView: View {
             targetTodo: todo,
             orderedTodos: $orderedTodos,
             draggedTodoModelID: $draggedTodoModelID,
+            draggedTodoModelIDs: $draggedTodoModelIDs,
             isDragging: $isDragging,
             modelContext: modelContext
         ))
@@ -187,22 +200,24 @@ private struct InboxTodoDropDelegate: DropDelegate {
     let targetTodo: Todo
     @Binding var orderedTodos: [Todo]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID,
-              draggedId != targetTodo.persistentModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty,
+              !draggedTodoModelIDs.contains(targetTodo.persistentModelID) else { return }
 
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromArray(draggedId: draggedId, array: &orderedTodos) else { return }
+            let dragged = removeTodosFromArray(draggedIds: draggedTodoModelIDs, array: &orderedTodos)
+            guard !dragged.isEmpty else { return }
 
             if let toIndex = orderedTodos.firstIndex(where: { $0.persistentModelID == targetTodo.persistentModelID }) {
-                orderedTodos.insert(dragged, at: toIndex)
+                orderedTodos.insert(contentsOf: dragged, at: toIndex)
             } else {
-                orderedTodos.append(dragged)
+                orderedTodos.append(contentsOf: dragged)
             }
         }
     }
@@ -212,7 +227,7 @@ private struct InboxTodoDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard draggedTodoModelID != nil else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
         for (i, todo) in orderedTodos.enumerated() {
             todo.sortOrder = i
@@ -220,6 +235,7 @@ private struct InboxTodoDropDelegate: DropDelegate {
         try? modelContext.save()
 
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }
@@ -228,16 +244,17 @@ private struct InboxTodoDropDelegate: DropDelegate {
 private struct InboxEndOfListDropDelegate: DropDelegate {
     @Binding var orderedTodos: [Todo]
     @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var draggedTodoModelIDs: Set<PersistentIdentifier>
     @Binding var isDragging: Bool
     let modelContext: ModelContext
 
     func dropEntered(info: DropInfo) {
-        guard let draggedId = draggedTodoModelID else { return }
+        guard !draggedTodoModelIDs.isEmpty else { return }
         isDragging = true
 
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            guard let dragged = removeTodoFromArray(draggedId: draggedId, array: &orderedTodos) else { return }
-            orderedTodos.append(dragged)
+            let dragged = removeTodosFromArray(draggedIds: draggedTodoModelIDs, array: &orderedTodos)
+            orderedTodos.append(contentsOf: dragged)
         }
     }
 
@@ -246,7 +263,7 @@ private struct InboxEndOfListDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard draggedTodoModelID != nil else { return false }
+        guard !draggedTodoModelIDs.isEmpty else { return false }
 
         for (i, todo) in orderedTodos.enumerated() {
             todo.sortOrder = i
@@ -254,6 +271,7 @@ private struct InboxEndOfListDropDelegate: DropDelegate {
         try? modelContext.save()
 
         draggedTodoModelID = nil
+        draggedTodoModelIDs.removeAll()
         isDragging = false
         return true
     }

@@ -49,6 +49,44 @@ func persistGroupSortOrders(
     try? modelContext.save()
 }
 
+// MARK: - Multi-Item Helpers
+
+/// Removes multiple todos by ID from a flat array, preserving their relative order.
+/// Returns the removed todos in their original order.
+func removeTodosFromArray(
+    draggedIds: Set<PersistentIdentifier>,
+    array: inout [Todo]
+) -> [Todo] {
+    var removed: [Todo] = []
+    array.removeAll { todo in
+        if draggedIds.contains(todo.persistentModelID) {
+            removed.append(todo)
+            return true
+        }
+        return false
+    }
+    return removed
+}
+
+/// Removes multiple todos by ID from grouped arrays, preserving their relative order.
+/// Returns the removed todos in their original order.
+func removeTodosFromGroups(
+    draggedIds: Set<PersistentIdentifier>,
+    groups: inout [String: [Todo]]
+) -> [Todo] {
+    var removed: [Todo] = []
+    for key in groups.keys {
+        groups[key]?.removeAll { todo in
+            if draggedIds.contains(todo.persistentModelID) {
+                removed.append(todo)
+                return true
+            }
+            return false
+        }
+    }
+    return removed
+}
+
 // MARK: - Drag Auto-Scroll
 
 /// Invisible view that polls mouse position during drag and scrolls the parent NSScrollView.

@@ -55,6 +55,8 @@ final class SelectionStore {
                 Log.focus.info("[SelectionStore] selectedProject set → clearing tab & todo")
                 selectedTab = nil
                 selectedTodo = nil
+                selectedTodoIDs.removeAll()
+                anchorTodoID = nil
             }
         }
     }
@@ -65,6 +67,8 @@ final class SelectionStore {
                 Log.focus.info("[SelectionStore] selectedTab set to \(tab.rawValue) → clearing project & todo")
                 selectedProject = nil
                 selectedTodo = nil
+                selectedTodoIDs.removeAll()
+                anchorTodoID = nil
             }
         }
     }
@@ -78,6 +82,60 @@ final class SelectionStore {
             }
         }
     }
+
+    /// All currently selected todo IDs (for multi-select)
+    var selectedTodoIDs: Set<PersistentIdentifier> = []
+
+    /// Anchor for shift-click range selection
+    var anchorTodoID: PersistentIdentifier?
+
     var addTaskRequested = false
     var addSectionRequested = false
+
+    // MARK: - Multi-Selection Helpers
+
+    /// Select a single todo, clearing any multi-selection
+    func selectSingle(_ todo: Todo) {
+        let id = todo.persistentModelID
+        selectedTodo = todo
+        selectedTodoIDs = [id]
+        anchorTodoID = id
+    }
+
+    /// Extend selection from anchor to target (shift-click)
+    func extendSelection(to todo: Todo, in orderedList: [Todo]) {
+        let targetId = todo.persistentModelID
+        guard let anchorId = anchorTodoID,
+              let anchorIndex = orderedList.firstIndex(where: { $0.persistentModelID == anchorId }),
+              let targetIndex = orderedList.firstIndex(where: { $0.persistentModelID == targetId })
+        else {
+            selectSingle(todo)
+            return
+        }
+
+        let range = min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)
+        selectedTodoIDs = Set(orderedList[range].map(\.persistentModelID))
+        selectedTodo = todo
+        // anchorTodoID stays unchanged
+    }
+
+    /// Extend selection by one step (shift+arrow)
+    func extendSelectionStep(to todo: Todo) {
+        let id = todo.persistentModelID
+        selectedTodoIDs.insert(id)
+        selectedTodo = todo
+        // anchorTodoID stays unchanged
+    }
+
+    /// Check if a todo is part of the current selection
+    func isSelected(_ todo: Todo) -> Bool {
+        selectedTodoIDs.contains(todo.persistentModelID)
+    }
+
+    /// Clear all selection state
+    func clearSelection() {
+        selectedTodo = nil
+        selectedTodoIDs.removeAll()
+        anchorTodoID = nil
+    }
 }

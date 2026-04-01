@@ -10,7 +10,7 @@ struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
     var startInEditMode: Bool = false
-    var onSelect: (() -> Void)?
+    var onSelect: ((NSEvent.ModifierFlags) -> Void)?
     var onEditModeStarted: (() -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
 
@@ -144,12 +144,13 @@ struct TaskRowView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             let now = Date()
+            let modifiers = NSApp.currentEvent?.modifierFlags ?? []
             if let last = lastTitleTapTime, now.timeIntervalSince(last) < 0.3 {
                 lastTitleTapTime = nil
                 startEditing()
             } else {
                 lastTitleTapTime = now
-                onSelect?()
+                onSelect?(modifiers)
             }
         }
         .preference(key: InlineEditingKey.self, value: isEditing)
