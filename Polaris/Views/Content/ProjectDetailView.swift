@@ -467,6 +467,7 @@ struct ProjectDetailView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            selectionPosition: selectionStore.selectionPosition(of: todo, in: allVisibleTodos),
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: { modifiers in
                 if modifiers.contains(.shift) {
@@ -607,9 +608,13 @@ struct ProjectDetailView: View {
     // MARK: - Actions
 
     private func addTodoContextAware() {
-        if let selectedTodo = selectionStore.selectedTodo {
-            // Insert below the selected task, in the same section
-            let section = selectedTodo.section
+        if selectionStore.selectedTodo != nil {
+            // Find the last selected todo by position in the visible list
+            let visibleTodos = allVisibleTodos
+            let lastSelected = visibleTodos.last(where: { selectionStore.selectedTodoIDs.contains($0.persistentModelID) }) ?? selectionStore.selectedTodo!
+
+            // Insert below the last selected task, in the same section
+            let section = lastSelected.section
             let todosInGroup: [Todo]
             if let section {
                 todosInGroup = sectionTodosMap[section.persistentModelID] ?? sortedTodos(for: section)
@@ -617,7 +622,7 @@ struct ProjectDetailView: View {
                 todosInGroup = orderedUnsectionedTodos
             }
 
-            let selectedIndex = todosInGroup.firstIndex(where: { $0.persistentModelID == selectedTodo.persistentModelID }) ?? (todosInGroup.count - 1)
+            let selectedIndex = todosInGroup.firstIndex(where: { $0.persistentModelID == lastSelected.persistentModelID }) ?? (todosInGroup.count - 1)
             let insertSortOrder = selectedIndex + 1
 
             // Shift tasks below
@@ -631,7 +636,7 @@ struct ProjectDetailView: View {
             modelContext.insert(todo)
             try? modelContext.save()
             Log.data.info("[ProjectDetailView] addTodoContextAware – saved, ID: \(todo.persistentModelID.hashValue)")
-            selectionStore.selectedTodo = todo
+            selectionStore.selectSingle(todo)
             newlyCreatedTodoID = todo.persistentModelID
             expandInspector(for: todo)
         } else {
@@ -692,6 +697,7 @@ struct ProjectDetailView: View {
         modelContext.insert(section)
         try? modelContext.save()
         newlyCreatedSectionID = section.persistentModelID
+        isListFocused = false
         syncAllState()
     }
 

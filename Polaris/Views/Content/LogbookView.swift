@@ -124,6 +124,7 @@ struct LogbookView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            selectionPosition: selectionStore.selectionPosition(of: todo, in: flatTodos),
             onSelect: { modifiers in
                 if modifiers.contains(.shift) {
                     selectionStore.extendSelection(to: todo, in: flatTodos)

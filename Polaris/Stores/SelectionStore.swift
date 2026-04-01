@@ -132,6 +132,22 @@ final class SelectionStore {
         selectedTodoIDs.contains(todo.persistentModelID)
     }
 
+    /// Compute the selection position of a todo within an ordered list
+    func selectionPosition(of todo: Todo, in orderedList: [Todo]) -> SelectionPosition {
+        guard selectedTodoIDs.count > 1 else { return .solo }
+        guard let index = orderedList.firstIndex(where: { $0.persistentModelID == todo.persistentModelID }) else { return .solo }
+
+        let prevSelected = index > 0 && selectedTodoIDs.contains(orderedList[index - 1].persistentModelID)
+        let nextSelected = index < orderedList.count - 1 && selectedTodoIDs.contains(orderedList[index + 1].persistentModelID)
+
+        switch (prevSelected, nextSelected) {
+        case (false, false): return .solo
+        case (false, true):  return .top
+        case (true, true):   return .middle
+        case (true, false):  return .bottom
+        }
+    }
+
     /// Clear all selection state
     func clearSelection() {
         selectedTodo = nil

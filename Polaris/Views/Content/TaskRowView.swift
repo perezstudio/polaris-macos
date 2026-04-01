@@ -6,9 +6,17 @@
 import SwiftUI
 import SwiftData
 
+enum SelectionPosition {
+    case solo       // Only selected item — all corners rounded
+    case top        // Top of contiguous group — top corners rounded
+    case middle     // Middle of contiguous group — no corners rounded
+    case bottom     // Bottom of contiguous group — bottom corners rounded
+}
+
 struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
+    var selectionPosition: SelectionPosition = .solo
     var startInEditMode: Bool = false
     var onSelect: ((NSEvent.ModifierFlags) -> Void)?
     var onEditModeStarted: (() -> Void)?
@@ -134,7 +142,7 @@ struct TaskRowView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            UnevenRoundedRectangle(cornerRadii: selectionCornerRadii)
                 .fill(
                     isSelected ? Color.accentColor.opacity(0.15) :
                     isHovered ? Color.primary.opacity(0.04) :
@@ -194,6 +202,22 @@ struct TaskRowView: View {
         Log.editing.info("[\(todoID)] cancelEdit")
         isEditing = false
         onEditingChanged?(false)
+    }
+
+    private var selectionCornerRadii: RectangleCornerRadii {
+        guard isSelected else {
+            return .init(topLeading: 6, bottomLeading: 6, bottomTrailing: 6, topTrailing: 6)
+        }
+        switch selectionPosition {
+        case .solo:
+            return .init(topLeading: 6, bottomLeading: 6, bottomTrailing: 6, topTrailing: 6)
+        case .top:
+            return .init(topLeading: 6, bottomLeading: 0, bottomTrailing: 0, topTrailing: 6)
+        case .middle:
+            return .init(topLeading: 0, bottomLeading: 0, bottomTrailing: 0, topTrailing: 0)
+        case .bottom:
+            return .init(topLeading: 0, bottomLeading: 6, bottomTrailing: 6, topTrailing: 0)
+        }
     }
 
     private var priorityBadge: some View {

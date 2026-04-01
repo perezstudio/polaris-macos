@@ -114,6 +114,7 @@ struct InboxView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            selectionPosition: selectionStore.selectionPosition(of: todo, in: orderedTodos),
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: { modifiers in
                 if modifiers.contains(.shift) {

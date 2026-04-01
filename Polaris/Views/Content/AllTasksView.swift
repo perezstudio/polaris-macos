@@ -191,6 +191,7 @@ struct AllTasksView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            selectionPosition: selectionStore.selectionPosition(of: todo, in: allVisibleTodos),
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: { modifiers in
                 if modifiers.contains(.shift) {
