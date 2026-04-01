@@ -117,7 +117,7 @@ struct InspectorView: View {
 
     private func titleSection(for todo: Todo) -> some View {
         inspectorCard {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Button {
                     todo.isCompleted.toggle()
                 } label: {
@@ -126,13 +126,17 @@ struct InspectorView: View {
                         .foregroundStyle(todo.isCompleted ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
+                .padding(.top, 1)
 
                 TextField("Task title", text: Binding(
                     get: { todo.title },
                     set: { todo.title = $0 }
-                ))
+                ), axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.appScaled(size: 16, weight: .semibold))
+                .lineLimit(1...10)
+                .padding(.top, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
