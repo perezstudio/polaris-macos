@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct LogbookView: View {
+    @Environment(\.modelContext) private var modelContext
     let selectionStore: SelectionStore
     let windowState: WindowStateModel
     var onToggleSidebar: (() -> Void)?
@@ -130,7 +131,19 @@ struct LogbookView: View {
                 }
             }
         )
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteTodo(todo)
+            }
+        }
         .id(todo.persistentModelID)
+    }
+
+    private func deleteTodo(_ todo: Todo) {
+        if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
+            selectionStore.selectedTodo = nil
+        }
+        modelContext.delete(todo)
     }
 
     private func toggleCollapse(_ key: String) {

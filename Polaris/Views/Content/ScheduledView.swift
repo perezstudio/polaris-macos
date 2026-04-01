@@ -28,6 +28,7 @@ struct ScheduledView: View {
     @State private var isDragging = false
     @State private var highlightedBucketId: String?
     @State private var collapsedBuckets: Set<String> = []
+    @State private var newlyCreatedTodoID: PersistentIdentifier?
 
     private var scheduledTodos: [Todo] {
         allTodos.filter { $0.effectiveDate != nil }
@@ -222,7 +223,11 @@ struct ScheduledView: View {
             windowState: windowState,
             onToggleSidebar: onToggleSidebar,
             onToggleInspector: onToggleInspector,
-            allTodos: allVisibleTodos
+            allTodos: allVisibleTodos,
+            onAddTask: { addTask() },
+            isDragging: $isDragging,
+            draggedTodoModelID: $draggedTodoModelID,
+            onPerformBackgroundDrop: { performBackgroundDrop() }
         ) { proxy in
             if allVisibleTodos.isEmpty && bucketTodosMap.isEmpty {
                 emptyState
@@ -251,6 +256,19 @@ struct ScheduledView: View {
                         ForEach(bucketTodosMap[meta.id] ?? []) { todo in
                             taskRow(for: todo, bucketId: meta.id, bucketDate: meta.startDate)
                         }
+
+                        // End-of-section drop target
+                        Color.clear
+                            .frame(height: 8)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.text], delegate: ScheduledEndOfSectionDropDelegate(
+                                targetBucketId: meta.id,
+                                targetDate: meta.startDate,
+                                bucketTodosMap: $bucketTodosMap,
+                                draggedTodoModelID: $draggedTodoModelID,
+                                isDragging: $isDragging,
+                                modelContext: modelContext
+                            ))
                     }
                 }
             }
@@ -264,6 +282,12 @@ struct ScheduledView: View {
             guard !isDragging else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
+            }
+        }
+        .onChange(of: selectionStore.addTaskRequested) { _, requested in
+            if requested {
+                selectionStore.addTaskRequested = false
+                addTask()
             }
         }
     }
@@ -312,7 +336,16 @@ struct ScheduledView: View {
             isDragging: $isDragging,
             modelContext: modelContext
         ))
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteTodo(todo)
+            }
+        }
         .id(todo.persistentModelID)
+    }
+
+    private func performBackgroundDrop() {
+        persistGroupSortOrders(groups: bucketTodosMap, modelContext: modelContext)
     }
 
     // MARK: - State
@@ -325,6 +358,28 @@ struct ScheduledView: View {
             map[bucket.meta.id] = bucket.todos
         }
         bucketTodosMap = map
+    }
+
+    // MARK: - Actions
+
+    private func addTask() {
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date()))!
+        let maxOrder = scheduledTodos.map(\.sortOrder).max() ?? -1
+        let todo = Todo(title: "", sortOrder: maxOrder + 1)
+        todo.dueDate = tomorrow
+        modelContext.insert(todo)
+        selectionStore.selectedTodo = todo
+        newlyCreatedTodoID = todo.persistentModelID
+        if windowState.isInspectorCollapsed {
+            onToggleInspector?()
+        }
+    }
+
+    private func deleteTodo(_ todo: Todo) {
+        if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
+            selectionStore.selectedTodo = nil
+        }
+        modelContext.delete(todo)
     }
 
     private func toggleCollapse(_ key: String) {
@@ -432,6 +487,46 @@ private struct ScheduledSectionDropDelegate: DropDelegate {
         highlightedBucketId = nil
 
         // Update date for the dragged todo
+        if let todo = bucketTodosMap[targetBucketId]?.first(where: { $0.persistentModelID == draggedId }) {
+            updateTodoDate(todo, to: targetDate)
+        }
+
+        persistGroupSortOrders(groups: bucketTodosMap, modelContext: modelContext)
+
+        draggedTodoModelID = nil
+        isDragging = false
+        return true
+    }
+}
+
+private struct ScheduledEndOfSectionDropDelegate: DropDelegate {
+    let targetBucketId: String
+    let targetDate: Date
+    @Binding var bucketTodosMap: [String: [Todo]]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var isDragging: Bool
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedTodoModelID else { return }
+        isDragging = true
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            guard let dragged = removeTodoFromGroups(draggedId: draggedId, groups: &bucketTodosMap) else { return }
+
+            var list = bucketTodosMap[targetBucketId] ?? []
+            list.append(dragged)
+            bucketTodosMap[targetBucketId] = list
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let draggedId = draggedTodoModelID else { return false }
+
         if let todo = bucketTodosMap[targetBucketId]?.first(where: { $0.persistentModelID == draggedId }) {
             updateTodoDate(todo, to: targetDate)
         }

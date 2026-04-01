@@ -29,6 +29,7 @@ struct AllTasksView: View {
     @State private var isDragging = false
     @State private var highlightedGroupId: String?
     @State private var collapsedGroups: Set<String> = []
+    @State private var newlyCreatedTodoID: PersistentIdentifier?
 
     // MARK: - Computed
 
@@ -90,7 +91,11 @@ struct AllTasksView: View {
             windowState: windowState,
             onToggleSidebar: onToggleSidebar,
             onToggleInspector: onToggleInspector,
-            allTodos: allVisibleTodos
+            allTodos: allVisibleTodos,
+            onAddTask: { addTask() },
+            isDragging: $isDragging,
+            draggedTodoModelID: $draggedTodoModelID,
+            onPerformBackgroundDrop: { performBackgroundDrop() }
         ) { proxy in
             if allVisibleTodos.isEmpty && groupTodosMap.isEmpty {
                 emptyState
@@ -119,6 +124,19 @@ struct AllTasksView: View {
                         ForEach(groupTodosMap[group.id] ?? []) { todo in
                             taskRow(for: todo, groupId: group.id, project: group.project)
                         }
+
+                        // End-of-section drop target
+                        Color.clear
+                            .frame(height: 8)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.text], delegate: AllTasksEndOfSectionDropDelegate(
+                                targetGroupId: group.id,
+                                targetProject: group.project,
+                                groupTodosMap: $groupTodosMap,
+                                draggedTodoModelID: $draggedTodoModelID,
+                                isDragging: $isDragging,
+                                modelContext: modelContext
+                            ))
                     }
                 }
             }
@@ -137,6 +155,12 @@ struct AllTasksView: View {
         .onChange(of: projects.count) {
             guard !isDragging else { return }
             syncState()
+        }
+        .onChange(of: selectionStore.addTaskRequested) { _, requested in
+            if requested {
+                selectionStore.addTaskRequested = false
+                addTask()
+            }
         }
     }
 
@@ -184,7 +208,16 @@ struct AllTasksView: View {
             isDragging: $isDragging,
             modelContext: modelContext
         ))
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteTodo(todo)
+            }
+        }
         .id(todo.persistentModelID)
+    }
+
+    private func performBackgroundDrop() {
+        persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
     }
 
     // MARK: - State
@@ -197,6 +230,26 @@ struct AllTasksView: View {
             map[group.id] = computedTodos(for: group.id)
         }
         groupTodosMap = map
+    }
+
+    // MARK: - Actions
+
+    private func addTask() {
+        let maxOrder = allTodos.map(\.sortOrder).max() ?? -1
+        let todo = Todo(title: "", sortOrder: maxOrder + 1)
+        modelContext.insert(todo)
+        selectionStore.selectedTodo = todo
+        newlyCreatedTodoID = todo.persistentModelID
+        if windowState.isInspectorCollapsed {
+            onToggleInspector?()
+        }
+    }
+
+    private func deleteTodo(_ todo: Todo) {
+        if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
+            selectionStore.selectedTodo = nil
+        }
+        modelContext.delete(todo)
     }
 
     private func toggleCollapse(_ key: String) {
@@ -302,6 +355,51 @@ private struct AllTasksSectionDropDelegate: DropDelegate {
         highlightedGroupId = nil
 
         // Update project assignment
+        if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
+            if targetGroupId == "inbox" {
+                todo.project = nil
+            } else {
+                todo.project = targetProject
+            }
+            todo.section = nil
+        }
+
+        persistGroupSortOrders(groups: groupTodosMap, modelContext: modelContext)
+
+        draggedTodoModelID = nil
+        isDragging = false
+        return true
+    }
+}
+
+private struct AllTasksEndOfSectionDropDelegate: DropDelegate {
+    let targetGroupId: String
+    let targetProject: Project?
+    @Binding var groupTodosMap: [String: [Todo]]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var isDragging: Bool
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedTodoModelID else { return }
+        isDragging = true
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            guard let dragged = removeTodoFromGroups(draggedId: draggedId, groups: &groupTodosMap) else { return }
+
+            var list = groupTodosMap[targetGroupId] ?? []
+            list.append(dragged)
+            groupTodosMap[targetGroupId] = list
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let draggedId = draggedTodoModelID else { return false }
+
         if let todo = groupTodosMap[targetGroupId]?.first(where: { $0.persistentModelID == draggedId }) {
             if targetGroupId == "inbox" {
                 todo.project = nil

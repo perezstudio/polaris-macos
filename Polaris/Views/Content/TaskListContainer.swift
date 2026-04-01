@@ -8,6 +8,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct TaskListContainer<Content: View>: View {
     let title: String
@@ -19,6 +20,12 @@ struct TaskListContainer<Content: View>: View {
     var onToggleInspector: (() -> Void)?
     var allTodos: [Todo]
     var onAddTask: (() -> Void)?
+
+    // Optional drag support
+    var isDragging: Binding<Bool>?
+    var draggedTodoModelID: Binding<PersistentIdentifier?>?
+    var onPerformBackgroundDrop: (() -> Void)?
+
     @ViewBuilder let content: (ScrollViewProxy) -> Content
 
     @FocusState private var isListFocused: Bool
@@ -44,13 +51,32 @@ struct TaskListContainer<Content: View>: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { deselectTask() }
                         }
+                        .modifier(BackgroundDropModifier(
+                            isDragging: isDragging,
+                            draggedTodoModelID: draggedTodoModelID,
+                            onPerformDrop: onPerformBackgroundDrop
+                        ))
                     }
                     .onAppear { scrollProxy = proxy }
+                }
+                .overlay {
+                    if let isDragging, let draggedTodoModelID,
+                       isDragging.wrappedValue {
+                        DragAutoScrollOverlay(
+                            isDragging: isDragging,
+                            draggedTodoModelID: draggedTodoModelID
+                        )
+                    }
                 }
             }
 
             VStack(spacing: 0) {
                 headerBar
+                    .modifier(BackgroundDropModifier(
+                        isDragging: isDragging,
+                        draggedTodoModelID: draggedTodoModelID,
+                        onPerformDrop: onPerformBackgroundDrop
+                    ))
                     .background(VisualEffectBackground(material: .headerView, blendingMode: .withinWindow))
                 Divider()
             }
@@ -178,5 +204,46 @@ struct TaskListContainer<Content: View>: View {
             onToggleInspector?()
         }
         isListFocused = true
+    }
+}
+
+// MARK: - Background Drop Modifier
+
+/// Conditionally applies a background drop delegate when drag state is provided.
+private struct BackgroundDropModifier: ViewModifier {
+    var isDragging: Binding<Bool>?
+    var draggedTodoModelID: Binding<PersistentIdentifier?>?
+    var onPerformDrop: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let isDragging, let draggedTodoModelID, let onPerformDrop {
+            content.onDrop(of: [.text], delegate: TabBackgroundDropDelegate(
+                isDragging: isDragging,
+                draggedTodoModelID: draggedTodoModelID,
+                onPerformDrop: onPerformDrop
+            ))
+        } else {
+            content
+        }
+    }
+}
+
+/// Generic background drop delegate for tab views.
+/// On drop, calls onPerformDrop which each view uses to persist sort orders and clear state.
+private struct TabBackgroundDropDelegate: DropDelegate {
+    @Binding var isDragging: Bool
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    let onPerformDrop: () -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggedTodoModelID != nil else { return false }
+        onPerformDrop()
+        draggedTodoModelID = nil
+        isDragging = false
+        return true
     }
 }

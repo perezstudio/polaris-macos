@@ -111,7 +111,6 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 10)
         .padding(.top, 2)
-        .padding(.bottom, 4)
     }
 
     // MARK: - Project List

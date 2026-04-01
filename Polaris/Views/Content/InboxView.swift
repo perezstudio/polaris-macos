@@ -42,7 +42,10 @@ struct InboxView: View {
             onToggleSidebar: onToggleSidebar,
             onToggleInspector: onToggleInspector,
             allTodos: orderedTodos,
-            onAddTask: { addTask() }
+            onAddTask: { addTask() },
+            isDragging: $isDragging,
+            draggedTodoModelID: $draggedTodoModelID,
+            onPerformBackgroundDrop: { performBackgroundDrop() }
         ) { proxy in
             if orderedTodos.isEmpty {
                 emptyState
@@ -50,6 +53,17 @@ struct InboxView: View {
                 ForEach(orderedTodos) { todo in
                     taskRow(for: todo)
                 }
+
+                // End-of-list drop target
+                Color.clear
+                    .frame(height: 8)
+                    .contentShape(Rectangle())
+                    .onDrop(of: [.text], delegate: InboxEndOfListDropDelegate(
+                        orderedTodos: $orderedTodos,
+                        draggedTodoModelID: $draggedTodoModelID,
+                        isDragging: $isDragging,
+                        modelContext: modelContext
+                    ))
             }
         }
         .onAppear { syncState() }
@@ -61,6 +75,12 @@ struct InboxView: View {
             guard !isDragging else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
+            }
+        }
+        .onChange(of: selectionStore.addTaskRequested) { _, requested in
+            if requested {
+                selectionStore.addTaskRequested = false
+                addTask()
             }
         }
     }
@@ -129,6 +149,13 @@ struct InboxView: View {
         orderedTodos = sortedTodos
     }
 
+    private func performBackgroundDrop() {
+        for (i, todo) in orderedTodos.enumerated() {
+            todo.sortOrder = i
+        }
+        try? modelContext.save()
+    }
+
     // MARK: - Actions
 
     private func addTask() {
@@ -173,6 +200,40 @@ private struct InboxTodoDropDelegate: DropDelegate {
             } else {
                 orderedTodos.append(dragged)
             }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggedTodoModelID != nil else { return false }
+
+        for (i, todo) in orderedTodos.enumerated() {
+            todo.sortOrder = i
+        }
+        try? modelContext.save()
+
+        draggedTodoModelID = nil
+        isDragging = false
+        return true
+    }
+}
+
+private struct InboxEndOfListDropDelegate: DropDelegate {
+    @Binding var orderedTodos: [Todo]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var isDragging: Bool
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedTodoModelID else { return }
+        isDragging = true
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            guard let dragged = removeTodoFromArray(draggedId: draggedId, array: &orderedTodos) else { return }
+            orderedTodos.append(dragged)
         }
     }
 

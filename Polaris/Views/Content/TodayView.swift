@@ -27,6 +27,7 @@ struct TodayView: View {
     @State private var isDragging = false
     @State private var collapsedSections: Set<String> = []
     @State private var highlightedSection: String?
+    @State private var newlyCreatedTodoID: PersistentIdentifier?
 
     private var todayTodos: [Todo] {
         allTodos.filter(\.isToday).sorted { a, b in
@@ -72,7 +73,11 @@ struct TodayView: View {
             windowState: windowState,
             onToggleSidebar: onToggleSidebar,
             onToggleInspector: onToggleInspector,
-            allTodos: allVisibleTodos
+            allTodos: allVisibleTodos,
+            onAddTask: { addTask() },
+            isDragging: $isDragging,
+            draggedTodoModelID: $draggedTodoModelID,
+            onPerformBackgroundDrop: { performBackgroundDrop() }
         ) { proxy in
             if orderedOverdue.isEmpty && orderedToday.isEmpty {
                 emptyState
@@ -91,6 +96,19 @@ struct TodayView: View {
                         ForEach(orderedOverdue) { todo in
                             taskRow(for: todo, sectionKey: "overdue")
                         }
+
+                        // End-of-section drop target
+                        Color.clear
+                            .frame(height: 8)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.text], delegate: TodayEndOfSectionDropDelegate(
+                                sectionKey: "overdue",
+                                orderedOverdue: $orderedOverdue,
+                                orderedToday: $orderedToday,
+                                draggedTodoModelID: $draggedTodoModelID,
+                                isDragging: $isDragging,
+                                modelContext: modelContext
+                            ))
                     }
                 }
 
@@ -118,6 +136,19 @@ struct TodayView: View {
                         ForEach(orderedToday) { todo in
                             taskRow(for: todo, sectionKey: "today")
                         }
+
+                        // End-of-section drop target
+                        Color.clear
+                            .frame(height: 8)
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.text], delegate: TodayEndOfSectionDropDelegate(
+                                sectionKey: "today",
+                                orderedOverdue: $orderedOverdue,
+                                orderedToday: $orderedToday,
+                                draggedTodoModelID: $draggedTodoModelID,
+                                isDragging: $isDragging,
+                                modelContext: modelContext
+                            ))
                     }
                 }
             }
@@ -131,6 +162,12 @@ struct TodayView: View {
             guard !isDragging else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
                 syncState()
+            }
+        }
+        .onChange(of: selectionStore.addTaskRequested) { _, requested in
+            if requested {
+                selectionStore.addTaskRequested = false
+                addTask()
             }
         }
     }
@@ -179,7 +216,18 @@ struct TodayView: View {
             isDragging: $isDragging,
             modelContext: modelContext
         ))
+        .contextMenu {
+            Button("Delete", role: .destructive) {
+                deleteTodo(todo)
+            }
+        }
         .id(todo.persistentModelID)
+    }
+
+    private func performBackgroundDrop() {
+        for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
+        for (i, todo) in orderedToday.enumerated() { todo.sortOrder = i }
+        try? modelContext.save()
     }
 
     // MARK: - State
@@ -187,6 +235,28 @@ struct TodayView: View {
     private func syncState() {
         orderedOverdue = computedOverdue
         orderedToday = computedDueToday
+    }
+
+    // MARK: - Actions
+
+    private func addTask() {
+        let today = Calendar.current.startOfDay(for: Date())
+        let maxOrder = (orderedToday + orderedOverdue).map(\.sortOrder).max() ?? -1
+        let todo = Todo(title: "", sortOrder: maxOrder + 1)
+        todo.dueDate = today
+        modelContext.insert(todo)
+        selectionStore.selectedTodo = todo
+        newlyCreatedTodoID = todo.persistentModelID
+        if windowState.isInspectorCollapsed {
+            onToggleInspector?()
+        }
+    }
+
+    private func deleteTodo(_ todo: Todo) {
+        if selectionStore.selectedTodo?.persistentModelID == todo.persistentModelID {
+            selectionStore.selectedTodo = nil
+        }
+        modelContext.delete(todo)
     }
 
     private func toggleCollapse(_ key: String) {
@@ -312,6 +382,60 @@ private struct TodaySectionDropDelegate: DropDelegate {
         highlightedSection = nil
 
         // If dropped on "today" section, update overdue dates
+        if sectionKey == "today" {
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            if let todo = orderedToday.first(where: { $0.persistentModelID == draggedId }) {
+                if let due = todo.dueDate, due < startOfToday {
+                    todo.dueDate = startOfToday
+                }
+                if let deadline = todo.deadlineDate, deadline < startOfToday {
+                    todo.deadlineDate = startOfToday
+                }
+            }
+        }
+
+        for (i, todo) in orderedOverdue.enumerated() { todo.sortOrder = i }
+        for (i, todo) in orderedToday.enumerated() { todo.sortOrder = i }
+        try? modelContext.save()
+
+        draggedTodoModelID = nil
+        isDragging = false
+        return true
+    }
+}
+
+private struct TodayEndOfSectionDropDelegate: DropDelegate {
+    let sectionKey: String
+    @Binding var orderedOverdue: [Todo]
+    @Binding var orderedToday: [Todo]
+    @Binding var draggedTodoModelID: PersistentIdentifier?
+    @Binding var isDragging: Bool
+    let modelContext: ModelContext
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedTodoModelID else { return }
+        isDragging = true
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            let dragged = removeTodoFromArray(draggedId: draggedId, array: &orderedOverdue)
+                ?? removeTodoFromArray(draggedId: draggedId, array: &orderedToday)
+            guard let dragged else { return }
+
+            if sectionKey == "today" {
+                orderedToday.append(dragged)
+            } else {
+                orderedOverdue.append(dragged)
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let draggedId = draggedTodoModelID else { return false }
+
         if sectionKey == "today" {
             let startOfToday = Calendar.current.startOfDay(for: Date())
             if let todo = orderedToday.first(where: { $0.persistentModelID == draggedId }) {
