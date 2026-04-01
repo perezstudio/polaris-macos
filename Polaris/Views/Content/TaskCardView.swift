@@ -112,7 +112,7 @@ struct TaskCardView: View {
                 .frame(width: isOpen ? 22 : 16, height: isOpen ? 22 : 16)
                 .contentShape(Rectangle())
                 .highPriorityGesture(TapGesture().onEnded {
-                    todo.isCompleted.toggle()
+                    todo.toggleCompletion()
                 })
 
             // Title — Text when closed (non-interactive), TextField when open

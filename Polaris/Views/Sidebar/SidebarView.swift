@@ -26,8 +26,37 @@ struct SidebarView: View {
             header
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
-                    addProjectButton
-                    projectList
+                    // Section 1: Inbox
+                    VStack(spacing: 2) {
+                        SidebarTabRow(
+                            tab: .inbox,
+                            isSelected: selectionStore.selectedTab == .inbox,
+                            onSelect: { selectionStore.selectedTab = .inbox }
+                        )
+                    }
+                    .padding(.horizontal, 10)
+
+                    Spacer().frame(height: 16)
+
+                    // Section 2: Smart filters
+                    VStack(spacing: 2) {
+                        ForEach([SidebarTab.today, .scheduled, .allTasks, .logbook], id: \.self) { tab in
+                            SidebarTabRow(
+                                tab: tab,
+                                isSelected: selectionStore.selectedTab == tab,
+                                onSelect: { selectionStore.selectedTab = tab }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 10)
+
+                    Spacer().frame(height: 16)
+
+                    // Section 3: Projects
+                    VStack(spacing: 0) {
+                        addProjectButton
+                        projectList
+                    }
                 }
                 .padding(.vertical, 4)
             }

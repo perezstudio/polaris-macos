@@ -41,6 +41,7 @@ final class Todo {
     var isCompleted: Bool
     var dueDate: Date?
     var deadlineDate: Date?
+    var completedAt: Date?
     var priorityRawValue: Int
     var createdAt: Date
     var sortOrder: Int
@@ -57,6 +58,28 @@ final class Todo {
     var priority: Priority {
         get { Priority(rawValue: priorityRawValue) ?? .none }
         set { priorityRawValue = newValue.rawValue }
+    }
+
+    var isToday: Bool {
+        let calendar = Calendar.current
+        let endOfToday = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: Date())!)
+        if let due = dueDate, due < endOfToday { return true }
+        if let deadline = deadlineDate, deadline < endOfToday { return true }
+        return false
+    }
+
+    func toggleCompletion() {
+        isCompleted.toggle()
+        completedAt = isCompleted ? Date() : nil
+    }
+
+    var effectiveDate: Date? {
+        switch (dueDate, deadlineDate) {
+        case let (due?, deadline?): return min(due, deadline)
+        case let (due?, nil): return due
+        case let (nil, deadline?): return deadline
+        case (nil, nil): return nil
+        }
     }
 
     init(

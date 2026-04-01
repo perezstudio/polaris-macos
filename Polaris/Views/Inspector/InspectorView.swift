@@ -119,7 +119,7 @@ struct InspectorView: View {
         inspectorCard {
             HStack(alignment: .top, spacing: 8) {
                 Button {
-                    todo.isCompleted.toggle()
+                    todo.toggleCompletion()
                 } label: {
                     Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 20))

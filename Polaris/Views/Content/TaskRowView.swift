@@ -24,7 +24,7 @@ struct TaskRowView: View {
         HStack(spacing: 8) {
             // Completion checkbox
             Button {
-                todo.isCompleted.toggle()
+                todo.toggleCompletion()
             } label: {
                 Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.appScaled(size: 16))
