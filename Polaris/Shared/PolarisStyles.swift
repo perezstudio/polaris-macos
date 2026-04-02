@@ -73,6 +73,7 @@ struct HoverMenuStyle: MenuStyle {
             .fixedSize()
             .foregroundStyle(iconColor ?? .primary)
             .frame(width: size.dimension, height: size.dimension)
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(Color.primary.opacity(isHovered ? 0.08 : 0))
