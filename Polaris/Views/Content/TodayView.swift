@@ -308,7 +308,7 @@ struct TodayView: View {
             modelContext: modelContext
         ))
         .rightClickMenu(selectionStore: selectionStore, todo: todo) {
-            MenuItems.destructiveButton("Delete") {
+            MenuItems.destructiveButton("Delete", systemImage: "trash") {
                 deleteTodo(todo)
             }
         }
@@ -363,7 +363,7 @@ struct TodayView: View {
             modelContext: modelContext
         ))
         .rightClickMenu(selectionStore: selectionStore, todo: todo) {
-            MenuItems.destructiveButton("Delete") {
+            MenuItems.destructiveButton("Delete", systemImage: "trash") {
                 deleteTodo(todo)
             }
         }

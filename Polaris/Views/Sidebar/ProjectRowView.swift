@@ -64,26 +64,12 @@ struct ProjectRowView: View {
                         .padding(.trailing, 4)
                 }
 
-                Menu {
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label("Edit Project...", systemImage: "pencil")
-                    }
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("Remove Project", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.appScaled(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
+                NSMenuButton(systemImage: "ellipsis", imageSize: 9, imageWeight: .bold) {
+                    MenuItems.button("Edit Project...", systemImage: "pencil") { onEdit() }
+                    MenuItems.divider()
+                    MenuItems.destructiveButton("Remove Project", systemImage: "trash") { onDelete() }
                 }
-                .menuStyle(.polarisHover(size: .small))
+                .frame(width: 24, height: 24)
                 .transition(.opacity)
             }
 
@@ -100,20 +86,10 @@ struct ProjectRowView: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
-        .contextMenu {
-            Button {
-                onEdit()
-            } label: {
-                Label("Edit Project...", systemImage: "pencil")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Remove Project", systemImage: "trash")
-            }
+        .rightClickMenu {
+            MenuItems.button("Edit Project...", systemImage: "pencil") { onEdit() }
+            MenuItems.divider()
+            MenuItems.destructiveButton("Remove Project", systemImage: "trash") { onDelete() }
         }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {

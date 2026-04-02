@@ -27,37 +27,6 @@ struct SectionHeaderView: View {
         Color.fromString(section.color)
     }
 
-@ViewBuilder
-    private var sectionMenu: some View {
-        Button("Add Task") { onAddTask?() }
-        Divider()
-
-        Menu("Color") {
-            ForEach(ProjectColor.allCases, id: \.self) { pc in
-                Button {
-                    section.color = pc.rawValue
-                } label: {
-                    HStack {
-                        Circle()
-                            .fill(pc.color)
-                            .frame(width: 8, height: 8)
-                        Text(pc.label)
-                        if section.color == pc.rawValue {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        }
-
-        Divider()
-        Button("Move to Another Project...") { onMoveToProject?() }
-        Button("Convert to Project") { onConvertToProject?() }
-        Divider()
-        Button("Delete Section Only") { onDeleteKeepTasks?() }
-        Button("Delete Section and Tasks", role: .destructive) { onDeleteWithTasks?() }
-    }
-
     var body: some View {
         HStack(spacing: 8) {
             // Collapse toggle
@@ -96,14 +65,23 @@ struct SectionHeaderView: View {
             Spacer()
 
             // Ellipsis menu — always reserves space, only visible on hover
-            Menu {
-                sectionMenu
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.appScaled(size: 11))
+            NSMenuButton(systemImage: "ellipsis", imageSize: 11, imageWeight: .bold, tintColor: NSColor(sectionColor)) {
+                MenuItems.button("Add Task", systemImage: "plus") { onAddTask?() }
+                MenuItems.divider()
+                MenuItems.submenu("Color", systemImage: "paintpalette") {
+                    ProjectColor.allCases.map { pc in
+                        let title = section.color == pc.rawValue ? "\(pc.label) ✓" : pc.label
+                        return MenuItems.button(title) { section.color = pc.rawValue }
+                    }
+                }
+                MenuItems.divider()
+                MenuItems.button("Move to Another Project...", systemImage: "arrow.right") { onMoveToProject?() }
+                MenuItems.button("Convert to Project", systemImage: "folder") { onConvertToProject?() }
+                MenuItems.divider()
+                MenuItems.destructiveButton("Delete Section Only", systemImage: "xmark.rectangle") { onDeleteKeepTasks?() }
+                MenuItems.destructiveButton("Delete Section and Tasks", systemImage: "trash") { onDeleteWithTasks?() }
             }
-            .tint(sectionColor)
-            .menuStyle(.polarisHover(size: .small))
+            .frame(width: 24, height: 24)
             .opacity(isHovered ? 1 : 0)
         }
         .padding(.horizontal, 8)
@@ -115,8 +93,21 @@ struct SectionHeaderView: View {
         .contentShape(Rectangle())
         .preference(key: InlineEditingKey.self, value: isEditing)
         .onHover { isHovered = $0 }
-        .contextMenu {
-            sectionMenu
+        .rightClickMenu {
+            MenuItems.button("Add Task", systemImage: "plus") { onAddTask?() }
+            MenuItems.divider()
+            MenuItems.submenu("Color", systemImage: "paintpalette") {
+                ProjectColor.allCases.map { pc in
+                    let title = section.color == pc.rawValue ? "\(pc.label) ✓" : pc.label
+                    return MenuItems.button(title) { section.color = pc.rawValue }
+                }
+            }
+            MenuItems.divider()
+            MenuItems.button("Move to Another Project...", systemImage: "arrow.right") { onMoveToProject?() }
+            MenuItems.button("Convert to Project", systemImage: "folder") { onConvertToProject?() }
+            MenuItems.divider()
+            MenuItems.destructiveButton("Delete Section Only", systemImage: "xmark.rectangle") { onDeleteKeepTasks?() }
+            MenuItems.destructiveButton("Delete Section and Tasks", systemImage: "trash") { onDeleteWithTasks?() }
         }
         .onAppear {
             if startInEditMode {

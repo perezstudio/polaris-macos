@@ -227,25 +227,12 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.polarisHover(size: .large))
 
-            Menu {
-                Button {
-                    editingProject = project
-                } label: {
-                    Label("Edit Project...", systemImage: "pencil")
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    showDeleteConfirmation = true
-                } label: {
-                    Label("Remove Project", systemImage: "trash")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.appScaled(size: 14))
+            NSMenuButton(systemImage: "ellipsis", imageSize: 14) {
+                MenuItems.button("Edit Project...", systemImage: "pencil") { editingProject = project }
+                MenuItems.divider()
+                MenuItems.destructiveButton("Remove Project", systemImage: "trash") { showDeleteConfirmation = true }
             }
-            .menuStyle(.polarisHover(size: .large))
+            .frame(width: 28, height: 28)
 
             if windowState.isInspectorCollapsed {
                 Button {
@@ -521,14 +508,14 @@ struct ProjectDetailView: View {
         ))
         .rightClickMenu(selectionStore: selectionStore, todo: todo) {
             if section != nil {
-                MenuItems.button("Remove from Section") {
+                MenuItems.button("Remove from Section", systemImage: "rectangle.lefthalf.inset.filled.arrow.left") {
                     todo.section = nil
                     try? modelContext.save()
                     syncAllState()
                 }
                 MenuItems.divider()
             }
-            MenuItems.destructiveButton("Delete") {
+            MenuItems.destructiveButton("Delete", systemImage: "trash") {
                 deleteTodo(todo)
             }
         }

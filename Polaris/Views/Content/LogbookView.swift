@@ -138,7 +138,7 @@ struct LogbookView: View {
             }
         )
         .rightClickMenu(selectionStore: selectionStore, todo: todo) {
-            MenuItems.destructiveButton("Delete") {
+            MenuItems.destructiveButton("Delete", systemImage: "trash") {
                 deleteTodo(todo)
             }
         }
