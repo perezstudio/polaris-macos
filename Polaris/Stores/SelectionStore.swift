@@ -89,8 +89,25 @@ final class SelectionStore {
     /// Anchor for shift-click range selection
     var anchorTodoID: PersistentIdentifier?
 
+    /// Secondary selection for right-click context menu (independent from primary selection)
+    var secondarySelectedTodoID: PersistentIdentifier?
+
     var addTaskRequested = false
     var addSectionRequested = false
+
+    // MARK: - Secondary Selection
+
+    func setSecondarySelection(_ todo: Todo) {
+        secondarySelectedTodoID = todo.persistentModelID
+    }
+
+    func clearSecondarySelection() {
+        secondarySelectedTodoID = nil
+    }
+
+    func isSecondarySelected(_ todo: Todo) -> Bool {
+        secondarySelectedTodoID == todo.persistentModelID
+    }
 
     // MARK: - Multi-Selection Helpers
 

@@ -318,6 +318,7 @@ struct ScheduledView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            isSecondarySelected: selectionStore.isSecondarySelected(todo),
             selectionPosition: selectionStore.selectionPosition(of: todo, in: allVisibleTodos),
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: { modifiers in
@@ -355,8 +356,8 @@ struct ScheduledView: View {
             isDragging: $isDragging,
             modelContext: modelContext
         ))
-        .contextMenu {
-            Button("Delete", role: .destructive) {
+        .rightClickMenu(selectionStore: selectionStore, todo: todo) {
+            MenuItems.destructiveButton("Delete") {
                 deleteTodo(todo)
             }
         }

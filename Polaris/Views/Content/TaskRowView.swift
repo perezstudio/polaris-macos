@@ -16,6 +16,7 @@ enum SelectionPosition {
 struct TaskRowView: View {
     @Bindable var todo: Todo
     let isSelected: Bool
+    var isSecondarySelected: Bool = false
     var selectionPosition: SelectionPosition = .solo
     var startInEditMode: Bool = false
     var onSelect: ((NSEvent.ModifierFlags) -> Void)?
@@ -145,6 +146,7 @@ struct TaskRowView: View {
             UnevenRoundedRectangle(cornerRadii: selectionCornerRadii)
                 .fill(
                     isSelected ? Color.accentColor.opacity(0.15) :
+                    isSecondarySelected ? Color.primary.opacity(0.10) :
                     isHovered ? Color.primary.opacity(0.04) :
                     Color.clear
                 )

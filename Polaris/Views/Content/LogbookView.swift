@@ -124,6 +124,7 @@ struct LogbookView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            isSecondarySelected: selectionStore.isSecondarySelected(todo),
             selectionPosition: selectionStore.selectionPosition(of: todo, in: flatTodos),
             onSelect: { modifiers in
                 if modifiers.contains(.shift) {
@@ -136,8 +137,8 @@ struct LogbookView: View {
                 }
             }
         )
-        .contextMenu {
-            Button("Delete", role: .destructive) {
+        .rightClickMenu(selectionStore: selectionStore, todo: todo) {
+            MenuItems.destructiveButton("Delete") {
                 deleteTodo(todo)
             }
         }

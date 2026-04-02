@@ -473,6 +473,7 @@ struct ProjectDetailView: View {
         TaskRowView(
             todo: todo,
             isSelected: isSelected,
+            isSecondarySelected: selectionStore.isSecondarySelected(todo),
             selectionPosition: selectionStore.selectionPosition(of: todo, in: allVisibleTodos),
             startInEditMode: newlyCreatedTodoID == todo.persistentModelID,
             onSelect: { modifiers in
@@ -518,16 +519,16 @@ struct ProjectDetailView: View {
             isDragging: $isDragging,
             modelContext: modelContext
         ))
-        .contextMenu {
+        .rightClickMenu(selectionStore: selectionStore, todo: todo) {
             if section != nil {
-                Button("Remove from Section") {
+                MenuItems.button("Remove from Section") {
                     todo.section = nil
                     try? modelContext.save()
                     syncAllState()
                 }
-                Divider()
+                MenuItems.divider()
             }
-            Button("Delete", role: .destructive) {
+            MenuItems.destructiveButton("Delete") {
                 deleteTodo(todo)
             }
         }
