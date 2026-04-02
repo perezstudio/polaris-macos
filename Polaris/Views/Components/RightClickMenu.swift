@@ -177,6 +177,8 @@ private class RightClickMenuView: NSView {
     var onDismiss: (() -> Void)?
     private var dismissObserver: NSObjectProtocol?
 
+    override var acceptsFirstResponder: Bool { false }
+
     // Only intercept right-clicks; pass all other events through to SwiftUI
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let currentEvent = NSApp.currentEvent else { return nil }
@@ -276,6 +278,8 @@ class NSMenuButtonView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    override var acceptsFirstResponder: Bool { false }
 
     func configure(systemImage: String, imageSize: CGFloat, imageWeight: NSFont.Weight, tintColor: NSColor?, menu: NSMenu) {
         let config = NSImage.SymbolConfiguration(pointSize: imageSize, weight: imageWeight)

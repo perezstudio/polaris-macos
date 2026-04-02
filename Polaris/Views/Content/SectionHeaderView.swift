@@ -83,6 +83,7 @@ struct SectionHeaderView: View {
             }
             .frame(width: 24, height: 24)
             .opacity(isHovered ? 1 : 0)
+            .allowsHitTesting(isHovered)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
