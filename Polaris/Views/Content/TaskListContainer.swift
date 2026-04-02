@@ -106,6 +106,12 @@ struct TaskListContainer<Content: View>: View {
                 Log.focus.debug("[TaskListContainer:\(title)] yielded focus for inline editing")
             } else {
                 DispatchQueue.main.async {
+                    // Don't steal focus from AppKit text views (e.g. notes editor in inspector)
+                    if let firstResponder = NSApp.keyWindow?.firstResponder,
+                       firstResponder is NSTextView {
+                        Log.focus.debug("[TaskListContainer:\(title)] skipped focus reclaim – NSTextView is first responder")
+                        return
+                    }
                     isListFocused = true
                     Log.focus.debug("[TaskListContainer:\(title)] reclaimed focus after inline editing")
                 }

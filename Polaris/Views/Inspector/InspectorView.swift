@@ -76,17 +76,33 @@ struct InspectorView: View {
     // MARK: - Inspector Content
 
     private func inspectorContent(for todo: Todo) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                titleSection(for: todo)
-                fieldsSection(for: todo)
-                checklistSection(for: todo)
-                notesSection(for: todo)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    titleSection(for: todo)
+                    fieldsSection(for: todo)
+                    checklistSection(for: todo)
+                    notesSection(for: todo)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 60)
+                .padding(.bottom, 16)
+                .frame(minHeight: geometry.size.height, alignment: .top)
+                .background {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { resignFocus() }
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 60)
-            .padding(.bottom, 16)
         }
+        .onKeyPress(.escape) {
+            resignFocus()
+            return .handled
+        }
+    }
+
+    private func resignFocus() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
     }
 
     private func inspectorCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {

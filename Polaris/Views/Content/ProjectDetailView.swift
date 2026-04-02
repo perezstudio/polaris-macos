@@ -89,6 +89,12 @@ struct ProjectDetailView: View {
                 Log.focus.debug("[ProjectDetailView] yielded focus for inline editing")
             } else {
                 DispatchQueue.main.async {
+                    // Don't steal focus from AppKit text views (e.g. notes editor in inspector)
+                    if let firstResponder = NSApp.keyWindow?.firstResponder,
+                       firstResponder is NSTextView {
+                        Log.focus.debug("[ProjectDetailView] skipped focus reclaim – NSTextView is first responder")
+                        return
+                    }
                     isListFocused = true
                     Log.focus.debug("[ProjectDetailView] reclaimed focus after inline editing")
                 }
@@ -404,7 +410,7 @@ struct ProjectDetailView: View {
                 onEditModeStarted: { newlyCreatedSectionID = nil },
                 onEditingChanged: { editing in
                     isEditingInline = editing
-                    if !editing { isListFocused = true }
+                    if !editing { reclaimFocusIfAppropriate() }
                 }
             )
             .padding(.top, 8)
@@ -483,7 +489,7 @@ struct ProjectDetailView: View {
             },
             onEditingChanged: { editing in
                 isEditingInline = editing
-                if !editing { isListFocused = true }
+                if !editing { reclaimFocusIfAppropriate() }
             }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
@@ -589,6 +595,16 @@ struct ProjectDetailView: View {
         selectionStore.clearSelection()
         if !windowState.isInspectorCollapsed {
             onToggleInspector?()
+        }
+        isListFocused = true
+    }
+
+    /// Reclaim list focus only if no AppKit text view currently has focus
+    /// (e.g. the notes editor or a TextField in the inspector).
+    private func reclaimFocusIfAppropriate() {
+        if let firstResponder = NSApp.keyWindow?.firstResponder,
+           firstResponder is NSTextView {
+            return
         }
         isListFocused = true
     }
