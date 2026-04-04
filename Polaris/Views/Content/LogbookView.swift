@@ -135,6 +135,9 @@ struct LogbookView: View {
                         onToggleInspector?()
                     }
                 }
+            },
+            onDeleteEmpty: {
+                deleteTodo(todo)
             }
         )
         .rightClickMenu(selectionStore: selectionStore, todo: todo) {

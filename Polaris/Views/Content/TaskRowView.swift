@@ -22,12 +22,13 @@ struct TaskRowView: View {
     var onSelect: ((NSEvent.ModifierFlags) -> Void)?
     var onEditModeStarted: (() -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
+    var onDeleteEmpty: (() -> Void)?
 
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editingTitle = ""
     @State private var lastTitleTapTime: Date?
-    @FocusState private var titleFieldFocused: Bool
+    @State private var titleFieldFocused = false
 
     private var todoID: String { "\(todo.persistentModelID.hashValue)" }
 
@@ -58,27 +59,28 @@ struct TaskRowView: View {
 
             // Title
             if isEditing {
-                TextField("New Task", text: $editingTitle)
-                    .textFieldStyle(.plain)
-                    .font(.appScaled(size: 13))
-                    .focused($titleFieldFocused)
-                    .onSubmit {
+                TaskTitleTextField(
+                    text: $editingTitle,
+                    isFocused: titleFieldFocused,
+                    onSubmit: {
                         Log.editing.debug("[\(todoID)] onSubmit → commitEdit")
                         commitEdit()
-                    }
-                    .onExitCommand {
-                        Log.editing.debug("[\(todoID)] onExitCommand → cancelEdit")
+                    },
+                    onCancel: {
+                        Log.editing.debug("[\(todoID)] onCancel → cancelEdit")
                         cancelEdit()
+                    },
+                    onDeleteEmpty: {
+                        Log.editing.debug("[\(todoID)] deleteBackward on empty → onDeleteEmpty")
+                        onDeleteEmpty?()
                     }
-                    .onChange(of: titleFieldFocused) { _, focused in
-                        Log.focus.debug("[\(todoID)] titleFieldFocused changed: \(focused)")
+                )
+                .onChange(of: isSelected) { _, selected in
+                    if !selected {
+                        Log.editing.debug("[\(todoID)] isSelected→false while editing → commitEdit")
+                        commitEdit()
                     }
-                    .onChange(of: isSelected) { _, selected in
-                        if !selected {
-                            Log.editing.debug("[\(todoID)] isSelected→false while editing → commitEdit")
-                            commitEdit()
-                        }
-                    }
+                }
             } else {
                 Text(todo.title.isEmpty ? "Untitled" : todo.title)
                     .font(.appScaled(size: 13))

@@ -478,6 +478,9 @@ struct ProjectDetailView: View {
             onEditingChanged: { editing in
                 isEditingInline = editing
                 if !editing { reclaimFocusIfAppropriate() }
+            },
+            onDeleteEmpty: {
+                deleteTodo(todo)
             }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)

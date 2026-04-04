@@ -331,7 +331,10 @@ struct ScheduledView: View {
                     }
                 }
             },
-            onEditModeStarted: { newlyCreatedTodoID = nil }
+            onEditModeStarted: { newlyCreatedTodoID = nil },
+            onDeleteEmpty: {
+                deleteTodo(todo)
+            }
         )
         .opacity(isBeingDragged ? 0.35 : 1.0)
         .scaleEffect(isBeingDragged ? 0.95 : 1.0)
